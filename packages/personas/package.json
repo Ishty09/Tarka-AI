@@ -10,7 +10,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist .turbo"
   },
