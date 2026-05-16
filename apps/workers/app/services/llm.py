@@ -7,6 +7,9 @@ proxy is OpenAI-shape, and httpx is enough.
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -115,6 +118,113 @@ class LiteLLMClient:
 
         data: dict[str, Any] = res.json()
         return data
+
+    async def chat_stream(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        temperature: float | None = None,
+        metadata: dict[str, Any] | None = None,
+        user: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> AsyncIterator[ChatStreamDelta]:
+        """Streaming chat completion. Yields ChatStreamDelta per SSE chunk.
+
+        Mirrors the chatStream async iterator in packages/ai/src/client.ts —
+        consumers in chat routes adapt these to whatever SSE protocol they
+        emit downstream.
+        """
+
+        body: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
+        if temperature is not None:
+            body["temperature"] = temperature
+        if metadata is not None:
+            body["metadata"] = metadata
+        if user is not None:
+            body["user"] = user
+
+        headers: dict[str, str] = {}
+        if idempotency_key is not None:
+            headers["idempotency-key"] = idempotency_key
+
+        try:
+            req = self._client.build_request("POST", "/chat/completions", json=body, headers=headers)
+            res = await self._client.send(req, stream=True)
+        except httpx.HTTPError as err:
+            raise LiteLLMNetworkError(str(err)) from err
+
+        try:
+            if res.status_code >= 400:
+                err_text = await res.aread()
+                try:
+                    err_body: Any = json.loads(err_text)
+                except ValueError:
+                    err_body = err_text.decode("utf-8", errors="replace")
+                log.warning(
+                    "litellm.stream_error",
+                    status=res.status_code,
+                    model=model,
+                    body=err_body,
+                )
+                raise LiteLLMError(
+                    f"LiteLLM /chat/completions {res.status_code}",
+                    res.status_code,
+                    err_body,
+                )
+
+            buffer = ""
+            async for chunk in res.aiter_text():
+                buffer += chunk
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line.removeprefix("data:").strip()
+                    if payload == "[DONE]":
+                        return
+                    try:
+                        decoded = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = _to_stream_delta(decoded)
+                    if delta is not None:
+                        yield delta
+        finally:
+            await res.aclose()
+
+
+@dataclass(slots=True)
+class ChatStreamDelta:
+    """One streaming chunk from chat_stream."""
+
+    delta: str
+    finish_reason: str | None
+    cached_tokens: int | None
+    raw: dict[str, Any]
+
+
+def _to_stream_delta(chunk: dict[str, Any]) -> ChatStreamDelta | None:
+    choices = chunk.get("choices") or []
+    if not choices:
+        # Some chunks (e.g. usage trailer) have no choices but carry totals.
+        usage = chunk.get("usage")
+        if isinstance(usage, dict):
+            cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+            return ChatStreamDelta(delta="", finish_reason=None, cached_tokens=cached, raw=chunk)
+        return None
+
+    first = choices[0]
+    delta_obj = first.get("delta") or {}
+    text = delta_obj.get("content") or ""
+    finish = first.get("finish_reason")
+    usage = chunk.get("usage") or {}
+    cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+
+    if not text and finish is None and cached is None:
+        return None
+    return ChatStreamDelta(delta=text, finish_reason=finish, cached_tokens=cached, raw=chunk)
 
 
 _singleton: LiteLLMClient | None = None
