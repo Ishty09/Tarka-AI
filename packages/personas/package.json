@@ -1,0 +1,23 @@
+{
+  "name": "@quarrel/personas",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Quarrel persona library — 25 launch personas across 16 locales (see CLAUDE.md §10).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo"
+  },
+  "dependencies": {
+    "@quarrel/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,13 @@
+# Force LF line endings across all platforms (we deploy to Linux).
+* text=auto eol=lf
+
+# Binary files should stay untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

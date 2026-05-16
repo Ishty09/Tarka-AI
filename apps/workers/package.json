@@ -1,0 +1,14 @@
+{
+  "name": "@quarrel/workers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shim package so Turborepo can orchestrate the FastAPI workers alongside the Next.js web app.",
+  "scripts": {
+    "dev": "uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "uv sync --frozen",
+    "lint": "uv run ruff check .",
+    "typecheck": "uv run mypy app",
+    "test": "uv run pytest",
+    "clean": "rimraf .venv .ruff_cache .pytest_cache .mypy_cache .turbo"
+  }
+}

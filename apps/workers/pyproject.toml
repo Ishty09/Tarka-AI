@@ -1,0 +1,56 @@
+[project]
+name = "quarrel-workers"
+version = "0.0.0"
+description = "Quarrel AI background workers and API (FastAPI)."
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+authors = [{ name = "Rabbi" }]
+dependencies = [
+    "fastapi[standard]>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic>=2.10.4",
+    "pydantic-settings>=2.7.1",
+    "httpx>=0.28.1",
+    "structlog>=24.4.0",
+    "python-dotenv>=1.0.1",
+    "supabase>=2.11.0",
+    "litellm>=1.57.0",
+    "slowapi>=0.1.9",
+    "sentry-sdk[fastapi]>=2.19.2",
+    "tenacity>=9.0.0",
+    "jinja2>=3.1.5",
+    "orjson>=3.10.14",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.2",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.9.1",
+    "mypy>=1.14.1",
+    "httpx>=0.28.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "C4", "PT", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
