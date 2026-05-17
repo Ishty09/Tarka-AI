@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import chat, safety
+from app.routes import chat, cron, safety
 
 app = FastAPI(
     title="Quarrel Workers",
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(safety.router)
 app.include_router(chat.router)
+app.include_router(cron.router)
 
 
 @app.get("/health")

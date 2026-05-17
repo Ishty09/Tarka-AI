@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     node_env: str = Field(default="development", alias="NODE_ENV")
     app_url: HttpUrl = Field(alias="NEXT_PUBLIC_APP_URL")
     workers_internal_secret: str = Field(default="", alias="WORKERS_INTERNAL_SECRET")
+    cron_secret: str = Field(default="", alias="CRON_SECRET")
 
     # ----- LiteLLM -----------------------------------------------------------
     litellm_proxy_url: HttpUrl = Field(alias="LITELLM_PROXY_URL")
