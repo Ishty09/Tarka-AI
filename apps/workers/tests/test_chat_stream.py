@@ -71,6 +71,23 @@ class _Query:
         self._filters.append((col, ("__in__", vals)))
         return self
 
+    def is_(self, col: str, val: Any) -> "_Query":
+        # supabase-py spells IS NULL as .is_(col, "null"). Treat anything
+        # else as a literal equality match for simplicity.
+        if val == "null":
+            self._filters.append((col, ("__is_null__", None)))
+        else:
+            self._filters.append((col, val))
+        return self
+
+    def gte(self, col: str, val: Any) -> "_Query":
+        self._filters.append((col, ("__gte__", val)))
+        return self
+
+    def or_(self, clause: str) -> "_Query":
+        self._filters.append(("__or__", ("__or__", clause)))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_Query":
         self._order = (col, desc)
         return self
@@ -91,7 +108,27 @@ class _Query:
         if self._op == "select":
             rows = list(self._table.rows)
             for col, val in self._filters:
-                rows = [r for r in rows if r.get(col) == val]
+                if isinstance(val, tuple) and val and val[0] == "__is_null__":
+                    rows = [r for r in rows if r.get(col) is None]
+                elif isinstance(val, tuple) and val and val[0] == "__gte__":
+                    rows = [r for r in rows if (r.get(col) or 0) >= val[1]]
+                elif col == "__or__":
+                    clause = val[1]
+                    ors: list[tuple[str, list[int]]] = []
+                    for fragment in clause.split(","):
+                        if ".in.(" in fragment:
+                            c, rhs = fragment.split(".in.(", 1)
+                            ids = [int(x) for x in rhs.rstrip(")").split(",") if x]
+                            ors.append((c, ids))
+                    if ors:
+                        def matches_or(row: dict[str, Any]) -> bool:
+                            for c, ids in ors:
+                                if row.get(c) in ids:
+                                    return True
+                            return False
+                        rows = [r for r in rows if matches_or(r)]
+                else:
+                    rows = [r for r in rows if r.get(col) == val]
             if self._order is not None:
                 col, desc = self._order
                 rows.sort(key=lambda r: r.get(col, 0), reverse=desc)
@@ -579,6 +616,61 @@ def test_user_facts_block_lands_in_system_message(
     assert facts_block["cache_control"] == {"type": "ephemeral"}
     assert "<user_facts>" in facts_block["text"]
     assert "[belief] User hates Mondays." in facts_block["text"]
+
+
+def test_contradiction_callout_emits_sse_and_marks_surfaced(
+    client: TestClient, fake_supabase: FakeSupabase
+) -> None:
+    # Seed a matched fact so fact_ids passes into find_relevant_contradiction.
+    fake_supabase.stub_rpc(
+        "match_user_facts",
+        [
+            {
+                "id": 1,
+                "fact": "User said quitting is overrated.",
+                "category": "belief",
+                "confidence": 0.9,
+                "similarity": 0.85,
+                "created_at": "2026-05-10T00:00:00+00:00",
+            }
+        ],
+    )
+    fake_supabase.seed(
+        "contradictions",
+        [
+            {
+                "id": 99,
+                "user_id": USER_ID,
+                "severity": 8,
+                "summary": "You said quitting is overrated then committed to quit.",
+                "fact_a_id": 1,
+                "fact_b_id": 2,
+                "surfaced_at": None,
+                "dismissed_at": None,
+                "fact_a": {"id": 1, "fact": "User said quitting is overrated.", "created_at": "2026-05-10"},
+                "fact_b": {"id": 2, "fact": "User committed to quit by Friday.", "created_at": "2026-05-12"},
+            }
+        ],
+    )
+
+    res = _post(client, _base_body())
+    assert res.status_code == 200
+
+    events = _parse_sse(res.content)
+    kinds = [e[0] for e in events]
+    assert "contradiction" in kinds, f"contradiction SSE event missing — got {kinds}"
+    # Callout must arrive before the first delta.
+    assert kinds.index("contradiction") < kinds.index("delta")
+
+    callout = next(e for e in events if e[0] == "contradiction")[1]
+    assert callout["id"] == 99
+    assert callout["severity"] == 8
+    assert "quitting" in callout["summary"]
+    assert callout["fact_a"]["text"].startswith("User said")
+
+    # mark_contradiction_surfaced ran — the row's surfaced_at is now set.
+    row = fake_supabase.table("contradictions").rows[0]
+    assert row["surfaced_at"] is not None
 
 
 def test_existing_conversation_belongs_to_other_user_returns_403(

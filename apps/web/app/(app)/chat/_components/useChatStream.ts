@@ -10,6 +10,14 @@ import { useCallback, useRef, useState } from "react";
 // translation hop with no benefit since apps/web never calls the LLM
 // directly. This hook is ~80 lines and shaped exactly to our wire.
 
+export interface ContradictionCallout {
+  id: number;
+  severity: number;
+  summary: string;
+  fact_a: { text: string; created_at: string };
+  fact_b: { text: string; created_at: string };
+}
+
 export interface ChatTurn {
   id: string;
   role: "user" | "assistant";
@@ -17,6 +25,8 @@ export interface ChatTurn {
   /** Set on assistant turns that were short-circuited by the safety screen. */
   safetyVerdict?: string;
   safetyReason?: string;
+  /** Contradiction surfaced inline §9.4.4 — pinned above the assistant bubble. */
+  contradiction?: ContradictionCallout;
 }
 
 export interface QuotaExceeded {
@@ -105,7 +115,14 @@ export function useChatStream(opts: UseChatStreamOptions) {
           const parsed = parseSseBlock(block);
           if (!parsed) continue;
 
-          if (parsed.event === "delta") {
+          if (parsed.event === "contradiction") {
+            const data = parsed.data as ContradictionCallout;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantTurn.id ? { ...m, contradiction: data } : m,
+              ),
+            );
+          } else if (parsed.event === "delta") {
             const text = (parsed.data as { text?: string }).text ?? "";
             setMessages((prev) =>
               prev.map((m) => (m.id === assistantTurn.id ? { ...m, content: m.content + text } : m)),

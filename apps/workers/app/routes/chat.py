@@ -48,7 +48,12 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
-from app.services.memory import load_user_facts
+from app.services.memory import (
+    ContradictionCallout,
+    find_relevant_contradiction,
+    load_user_facts,
+    mark_contradiction_surfaced,
+)
 from app.services.quotas import get_message_quota, increment_message_count
 from app.services.safety import classify_message, redact
 from app.services.supabase_client import get_supabase
@@ -201,11 +206,18 @@ async def chat_stream(
     )
 
     # ----- Assemble messages + stream ----------------------------------------
-    system_blocks = await _build_system_blocks(
+    system_blocks, fact_ids = await _build_system_blocks(
         supabase,
         user_id=user_id,
         persona_system_prompt=conversation["persona_system_prompt"],
         query_message=req.message,
+    )
+    # §9.4.4 inline callout: surface at most one unsurfaced contradiction
+    # whose facts overlap with the retrieved memory bundle.
+    callout = await find_relevant_contradiction(
+        supabase,
+        user_id,
+        fact_ids=fact_ids,
     )
     history = await _load_history(supabase, conversation_id=conversation["id"], limit=20)
 
@@ -222,6 +234,7 @@ async def chat_stream(
             payload_hash=payload_hash,
             user_message=req.message,
             user_message_id=user_message_id,
+            callout=callout,
         ),
         media_type="text/event-stream",
     )
@@ -241,11 +254,34 @@ async def _stream_assistant(
     payload_hash: str,
     user_message: str,
     user_message_id: int,
+    callout: ContradictionCallout | None = None,
 ) -> AsyncIterator[bytes]:
     started_at = time.perf_counter()
     accumulated: list[str] = []
     finish_reason: str | None = None
     cached_tokens: int | None = None
+
+    # §9.4.4: emit any active contradiction callout BEFORE the model deltas
+    # so the UI can pin a banner above the streaming reply. surfaced_at
+    # stamp prevents repeat surfacing on subsequent turns.
+    if callout is not None:
+        yield _sse_event(
+            "contradiction",
+            {
+                "id": callout.id,
+                "severity": callout.severity,
+                "summary": callout.summary,
+                "fact_a": {
+                    "text": callout.fact_a_text,
+                    "created_at": callout.fact_a_created_at,
+                },
+                "fact_b": {
+                    "text": callout.fact_b_text,
+                    "created_at": callout.fact_b_created_at,
+                },
+            },
+        )
+        await mark_contradiction_surfaced(supabase, callout.id)
 
     try:
         async for chunk in llm.chat_stream(
@@ -416,7 +452,7 @@ async def _build_system_blocks(
     user_id: str,
     persona_system_prompt: str,
     query_message: str,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[int]]:
     """Assemble the system message as cache-controlled content blocks.
 
     §7.6 caching strategy splits the prompt into two segments:
@@ -455,7 +491,7 @@ async def _build_system_blocks(
                 "cache_control": {"type": "ephemeral"},
             }
         )
-    return blocks
+    return blocks, facts.fact_ids
 
 
 async def _load_history(

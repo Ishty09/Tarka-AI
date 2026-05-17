@@ -127,7 +127,10 @@ export function ChatThread({
 function MessageBubble({ turn }: { turn: ChatTurn }) {
   const isUser = turn.role === "user";
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex flex-col gap-2 ${isUser ? "items-end" : "items-start"}`}>
+      {turn.contradiction && (
+        <ContradictionCallout callout={turn.contradiction} />
+      )}
       <div
         className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm shadow-sm ${
           isUser
@@ -138,6 +141,36 @@ function MessageBubble({ turn }: { turn: ChatTurn }) {
         }`}
       >
         {turn.content || (turn.role === "assistant" && <span className="text-muted-foreground">...</span>)}
+      </div>
+    </div>
+  );
+}
+
+function ContradictionCallout({ callout }: { callout: NonNullable<ChatTurn["contradiction"]> }) {
+  // §9.4.4 inline callout. Severity 7+ leans red, 4-6 amber, lower stays
+  // neutral — mirrors the Contradiction Wall (§9.4.1) palette.
+  const tone =
+    callout.severity >= 7
+      ? "border-red-500/40 bg-red-500/10 text-red-900 dark:text-red-200"
+      : callout.severity >= 4
+      ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+      : "border-input bg-muted/30";
+  return (
+    <div className={`w-full max-w-[85%] rounded-md border p-3 text-xs shadow-sm ${tone}`}>
+      <div className="flex items-center justify-between font-medium">
+        <span>Heads up — contradiction</span>
+        <span className="font-mono">{callout.severity}/10</span>
+      </div>
+      <p className="mt-1 text-sm">{callout.summary}</p>
+      <div className="mt-2 grid gap-1 text-[11px] opacity-80">
+        <span>
+          <strong>Earlier ({new Date(callout.fact_a.created_at).toLocaleDateString()}):</strong>{" "}
+          {callout.fact_a.text}
+        </span>
+        <span>
+          <strong>Now ({new Date(callout.fact_b.created_at).toLocaleDateString()}):</strong>{" "}
+          {callout.fact_b.text}
+        </span>
       </div>
     </div>
   );
