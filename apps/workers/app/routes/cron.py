@@ -16,8 +16,10 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
+from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
 from app.services.contradictions import run_batch
+from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
 
 log = structlog.get_logger(__name__)
@@ -113,6 +115,59 @@ async def mirror_mode(req: MirrorBatchRequest) -> MirrorBatchResponse:
         result = await run_mirror_window(period_start=start, period_end=end)
 
     return MirrorBatchResponse(
+        period_start=start,
+        period_end=end,
+        eligible_users=result.get("eligible_users", 0),
+        inserted=result.get("inserted", 0),
+        skipped=result.get("skipped", 0),
+    )
+
+
+class EulogyBatchRequest(BaseModel):
+    """Optional override of the quarter and window.
+
+    Default (none): run for the previous quarter ending at the start of the
+    current one. Backfill: POST {"quarter": "2026-Q1",
+    "period_start": "2026-01-01T00:00:00Z",
+    "period_end": "2026-04-01T00:00:00Z"} to rerun a specific window.
+    """
+
+    quarter: str | None = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+
+class EulogyBatchResponse(BaseModel):
+    quarter: str
+    period_start: datetime
+    period_end: datetime
+    eligible_users: int
+    inserted: int
+    skipped: int
+
+
+@router.post(
+    "/eulogy",
+    response_model=EulogyBatchResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def eulogy(req: EulogyBatchRequest) -> EulogyBatchResponse:
+    if req.quarter is None and req.period_start is None and req.period_end is None:
+        result = await run_previous_quarter()
+        quarter, start, end = previous_quarter_window(datetime.now(UTC))
+    else:
+        if not (req.quarter and req.period_start and req.period_end):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "quarter + period_start + period_end must be supplied together",
+            )
+        quarter, start, end = req.quarter, req.period_start, req.period_end
+        result = await run_quarter(
+            quarter=quarter, period_start=start, period_end=end
+        )
+
+    return EulogyBatchResponse(
+        quarter=quarter,
         period_start=start,
         period_end=end,
         eligible_users=result.get("eligible_users", 0),
