@@ -119,6 +119,50 @@ class LiteLLMClient:
         data: dict[str, Any] = res.json()
         return data
 
+    async def embed(
+        self,
+        *,
+        model: str,
+        input: str | list[str],
+        user: str | None = None,
+    ) -> list[list[float]]:
+        """Embeddings call. Returns a list of vectors in input order.
+
+        Single str input → list with one vector. List input → list with one
+        vector per item. We hide the OpenAI envelope (`data: [{embedding}]`)
+        because every caller wants the bare floats.
+        """
+
+        body: dict[str, Any] = {"model": model, "input": input}
+        if user is not None:
+            body["user"] = user
+
+        try:
+            res = await self._client.post("/embeddings", json=body)
+        except httpx.HTTPError as err:
+            raise LiteLLMNetworkError(str(err)) from err
+
+        if res.status_code >= 400:
+            try:
+                err_body = res.json()
+            except ValueError:
+                err_body = res.text
+            log.warning(
+                "litellm.embed_error",
+                status=res.status_code,
+                model=model,
+                body=err_body,
+            )
+            raise LiteLLMError(
+                f"LiteLLM /embeddings {res.status_code}",
+                res.status_code,
+                err_body,
+            )
+
+        data: dict[str, Any] = res.json()
+        items = data.get("data", [])
+        return [item["embedding"] for item in items]
+
     async def chat_stream(
         self,
         *,

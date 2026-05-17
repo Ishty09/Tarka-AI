@@ -26,8 +26,10 @@ from pydantic import BaseModel, Field, ValidationError
 from supabase import AsyncClient
 
 from app.prompts.fact_extraction import FACT_EXTRACTION_PROMPT
+from app.services._db_typing import rows as _rows
 from app.services.llm import (
     QUARREL_CHEAP,
+    QUARREL_EMBED,
     LiteLLMClient,
     LiteLLMError,
     LiteLLMNetworkError,
@@ -131,14 +133,15 @@ async def persist_facts(
     user_id: str,
     source_message_id: int | None,
     facts: list[ExtractedFact],
-) -> int:
-    """Insert extracted facts. Returns the number of rows inserted.
+) -> list[tuple[int, str]]:
+    """Insert extracted facts. Returns (id, fact_text) tuples in order.
 
-    Errors are logged and swallowed — fact insertion is best-effort.
+    Empty list on insert failure — fact insertion is best-effort and
+    embedding is owner of the follow-up backfill.
     """
 
     if not facts:
-        return 0
+        return []
 
     payload = [
         {
@@ -149,17 +152,68 @@ async def persist_facts(
             "source_message_id": source_message_id,
             "superseded_by": None,
             "is_active": True,
-            # embedding stays null — Phase C step 14 backfills + embeds.
+            # embedding stays null here — embed_facts() backfills below.
         }
         for f in facts
     ]
 
     try:
-        await supabase.table("user_facts").insert(payload).execute()
+        res = await supabase.table("user_facts").insert(payload).execute()
     except Exception as err:  # noqa: BLE001 — best-effort path
         log.warning("facts.persist.failed", user_id=user_id, error=str(err))
+        return []
+
+    inserted = _rows(res.data)
+    return [(int(row["id"]), str(row["fact"])) for row in inserted]
+
+
+async def embed_facts(
+    supabase: AsyncClient,
+    *,
+    facts: list[tuple[int, str]],
+    client: LiteLLMClient | None = None,
+) -> int:
+    """Embed every fact in `facts` and write the vector to user_facts.embedding.
+
+    Batches into a single /embeddings call. Failures are swallowed — the
+    affected rows simply stay at embedding=null, which match_user_facts
+    excludes from retrieval (the next chat turn with a similar query will
+    not see them, but they're still on disk and a later backfill can fill).
+    """
+
+    if not facts:
         return 0
-    return len(facts)
+
+    llm = client or get_llm_client()
+    inputs = [text for _, text in facts]
+
+    try:
+        vectors = await llm.embed(model=QUARREL_EMBED, input=inputs)
+    except (LiteLLMError, LiteLLMNetworkError) as err:
+        log.warning("facts.embed.llm_error", count=len(facts), error=str(err))
+        return 0
+
+    if len(vectors) != len(facts):
+        log.warning(
+            "facts.embed.length_mismatch",
+            expected=len(facts),
+            got=len(vectors),
+        )
+        return 0
+
+    updated = 0
+    for (fact_id, _), vector in zip(facts, vectors, strict=True):
+        try:
+            await (
+                supabase.table("user_facts")
+                .update({"embedding": vector})
+                .eq("id", fact_id)
+                .execute()
+            )
+            updated += 1
+        except Exception as err:  # noqa: BLE001 — best-effort path
+            log.warning("facts.embed.update_failed", fact_id=fact_id, error=str(err))
+    return updated
 
 
 async def extract_and_persist(
@@ -171,7 +225,7 @@ async def extract_and_persist(
     client: LiteLLMClient | None = None,
     supabase: AsyncClient | None = None,
 ) -> int:
-    """End-to-end: classify → persist. Returns the count of inserted facts.
+    """End-to-end: classify → persist → embed. Returns count of inserted facts.
 
     Module-level swap point used by `chat_stream` via `asyncio.create_task`.
     Tests monkeypatch this to run synchronously.
@@ -187,18 +241,22 @@ async def extract_and_persist(
         return 0
 
     sb = supabase or await get_supabase()
-    return await persist_facts(
+    inserted = await persist_facts(
         sb,
         user_id=user_id,
         source_message_id=source_message_id,
         facts=result.facts,
     )
+    if inserted:
+        await embed_facts(sb, facts=inserted, client=client)
+    return len(inserted)
 
 
 __all__ = [
     "ExtractedFact",
     "FactCategory",
     "FactExtractionResult",
+    "embed_facts",
     "extract_and_persist",
     "extract_facts",
     "persist_facts",

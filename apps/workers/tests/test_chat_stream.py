@@ -158,17 +158,37 @@ class _Table:
         return _Query(self, "upsert").upsert(payload, on_conflict=on_conflict)
 
 
+class _RpcQuery:
+    def __init__(self, parent: "FakeSupabase", name: str, params: dict[str, Any]) -> None:
+        self._parent = parent
+        self._name = name
+        self._params = params
+
+    async def execute(self) -> _ExecuteResult:
+        self._parent.rpc_calls.append({"name": self._name, "params": self._params})
+        result = self._parent.rpc_results.get(self._name, [])
+        return _ExecuteResult(result)
+
+
 class FakeSupabase:
     def __init__(self) -> None:
         self.tables: dict[str, _Table] = {}
+        self.rpc_results: dict[str, list[dict[str, Any]]] = {}
+        self.rpc_calls: list[dict[str, Any]] = []
 
     def table(self, name: str) -> _Table:
         if name not in self.tables:
             self.tables[name] = _Table(name)
         return self.tables[name]
 
+    def rpc(self, name: str, params: dict[str, Any] | None = None) -> _RpcQuery:
+        return _RpcQuery(self, name, params or {})
+
     def seed(self, table: str, rows: list[dict[str, Any]]) -> None:
         self.table(table).rows.extend(rows)
+
+    def stub_rpc(self, name: str, rows: list[dict[str, Any]]) -> None:
+        self.rpc_results[name] = rows
 
 
 # ----- LLM fake --------------------------------------------------------------
@@ -199,6 +219,11 @@ class FakeLLM:
         for piece in self._stream_deltas:
             yield ChatStreamDelta(delta=piece, finish_reason=None, cached_tokens=None, raw={})
         yield ChatStreamDelta(delta="", finish_reason="stop", cached_tokens=12, raw={})
+
+    async def embed(self, **kwargs: Any) -> list[list[float]]:
+        # Memory retrieval calls this; we don't care about the values in
+        # these tests since the FakeSupabase rpc returns no matches.
+        return [[0.0] * 1536]
 
 
 # ----- Fixtures --------------------------------------------------------------
