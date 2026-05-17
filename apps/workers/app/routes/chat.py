@@ -201,7 +201,7 @@ async def chat_stream(
     )
 
     # ----- Assemble messages + stream ----------------------------------------
-    system_prompt = await _build_system_prompt(
+    system_blocks = await _build_system_blocks(
         supabase,
         user_id=user_id,
         persona_system_prompt=conversation["persona_system_prompt"],
@@ -209,7 +209,7 @@ async def chat_stream(
     )
     history = await _load_history(supabase, conversation_id=conversation["id"], limit=20)
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}, *history]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_blocks}, *history]
 
     return StreamingResponse(
         _stream_assistant(
@@ -410,20 +410,52 @@ async def _load_persona_by_slug(supabase: AsyncClient, slug: str) -> dict[str, A
     return row
 
 
-async def _build_system_prompt(
+async def _build_system_blocks(
     supabase: AsyncClient,
     *,
     user_id: str,
     persona_system_prompt: str,
     query_message: str,
-) -> str:
-    """§7.3 base + §7.4 persona + §7.3 <user_facts> block."""
+) -> list[dict[str, Any]]:
+    """Assemble the system message as cache-controlled content blocks.
+
+    §7.6 caching strategy splits the prompt into two segments:
+      1. Anti-sycophant base + persona overlay — long-lived. Identical
+         across turns of the same conversation, so OpenAI prompt caching
+         auto-hits and Anthropic respects the cache_control marker.
+      2. <user_facts> block — rotates per turn but still worth marking so
+         repeat turns within a short window benefit.
+
+    Both blocks use `cache_control: ephemeral` because Anthropic's 1-hour
+    cache is beta and not in our locked stack — when it lands we can flip
+    the static block to "persistent" without touching call sites.
+
+    Mirrors packages/ai/src/caching.ts buildSystemMessage().
+    """
 
     facts = await load_user_facts(supabase, user_id, query_message=query_message)
-    parts = [ANTI_SYCOPHANT_BASE_PROMPT, persona_system_prompt]
+    log.info(
+        "chat.system_prompt.facts",
+        user_id=user_id,
+        fact_count=facts.count,
+    )
+
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": f"{ANTI_SYCOPHANT_BASE_PROMPT}\n\n{persona_system_prompt}",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
     if facts.text:
-        parts.append(f"<user_facts>\n{facts.text}\n</user_facts>")
-    return "\n\n".join(parts)
+        blocks.append(
+            {
+                "type": "text",
+                "text": f"<user_facts>\n{facts.text}\n</user_facts>",
+                "cache_control": {"type": "ephemeral"},
+            }
+        )
+    return blocks
 
 
 async def _load_history(

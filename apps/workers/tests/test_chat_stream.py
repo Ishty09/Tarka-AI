@@ -532,6 +532,55 @@ def test_fact_extraction_not_scheduled_for_safety_refusal(
     assert calls == []  # crisis refusal short-circuits before the stream loop
 
 
+def test_system_message_uses_cache_controlled_blocks(
+    client: TestClient, fake_llm: FakeLLM
+) -> None:
+    res = _post(client, _base_body())
+    assert res.status_code == 200
+
+    # The chat_stream call carries the assembled messages list.
+    assert fake_llm.stream_calls, "stream should have fired"
+    sent_messages = fake_llm.stream_calls[0]["messages"]
+    system = sent_messages[0]
+    assert system["role"] == "system"
+    assert isinstance(system["content"], list)
+    # Single block when no facts were retrieved.
+    assert len(system["content"]) == 1
+    base = system["content"][0]
+    assert base["type"] == "text"
+    assert base["cache_control"] == {"type": "ephemeral"}
+    assert "Quarrel" in base["text"]
+    assert "ARGUE PROMPT" in base["text"]
+
+
+def test_user_facts_block_lands_in_system_message(
+    client: TestClient, fake_supabase: FakeSupabase, fake_llm: FakeLLM
+) -> None:
+    fake_supabase.stub_rpc(
+        "match_user_facts",
+        [
+            {
+                "id": 1,
+                "fact": "User hates Mondays.",
+                "category": "belief",
+                "confidence": 0.9,
+                "similarity": 0.88,
+                "created_at": "2026-05-01T00:00:00+00:00",
+            }
+        ],
+    )
+    res = _post(client, _base_body())
+    assert res.status_code == 200
+
+    sent_messages = fake_llm.stream_calls[0]["messages"]
+    system_content = sent_messages[0]["content"]
+    assert len(system_content) == 2  # base + facts block
+    facts_block = system_content[1]
+    assert facts_block["cache_control"] == {"type": "ephemeral"}
+    assert "<user_facts>" in facts_block["text"]
+    assert "[belief] User hates Mondays." in facts_block["text"]
+
+
 def test_existing_conversation_belongs_to_other_user_returns_403(
     client: TestClient, fake_supabase: FakeSupabase
 ) -> None:
