@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type ChatTurn, useChatStream } from "./useChatStream";
+import { ChatHeader } from "./ChatHeader";
 
 // Client-side chat thread. Composer pinned to the bottom; messages reflow
 // upward as deltas stream in.
@@ -18,6 +19,7 @@ interface Props {
   personaName: string;
   mode: "argue" | "roast" | "mediate" | "council" | "negotiate" | "custom";
   initialMessages: ChatTurn[];
+  initialTitle?: string | null;
 }
 
 export function ChatThread({
@@ -26,6 +28,7 @@ export function ChatThread({
   personaName,
   mode,
   initialMessages,
+  initialTitle = null,
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState("");
@@ -59,10 +62,12 @@ export function ChatThread({
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <header className="border-b px-4 py-3">
-        <div className="text-sm font-medium">{personaName}</div>
-        <div className="text-xs text-muted-foreground capitalize">{mode}</div>
-      </header>
+      <ChatHeader
+        conversationId={conversationId}
+        initialTitle={initialTitle}
+        personaName={personaName}
+        mode={mode}
+      />
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">

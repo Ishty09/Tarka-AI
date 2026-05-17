@@ -25,7 +25,7 @@ export default async function ChatPage({ params }: PageProps) {
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, mode, persona:personas(slug, name)")
+    .select("id, mode, title, persona:personas(slug, name)")
     .eq("id", id)
     .maybeSingle();
 
@@ -63,6 +63,7 @@ export default async function ChatPage({ params }: PageProps) {
       personaName={persona?.name ?? "Persona"}
       mode={mode}
       initialMessages={initialMessages}
+      initialTitle={conversation.title ?? null}
     />
   );
 }
