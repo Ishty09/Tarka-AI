@@ -22,6 +22,7 @@ Fact extraction (§7.2 row) is queued for Phase C and is left as a TODO.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import time
@@ -37,6 +38,7 @@ from supabase import AsyncClient
 
 from app.config import get_settings
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
+from app.services import fact_extraction
 from app.services._db_typing import row_or_none, rows as _rows
 from app.services.idempotency import check_idempotency, record_idempotency
 from app.services.llm import (
@@ -189,7 +191,7 @@ async def chat_stream(
         )
 
     # ----- Persist user message ----------------------------------------------
-    await _persist_user_message(
+    user_message_id = await _persist_user_message(
         supabase,
         conversation_id=conversation["id"],
         user_id=user_id,
@@ -218,6 +220,8 @@ async def chat_stream(
             conversation_id=conversation["id"],
             idempotency_key=req.idempotency_key,
             payload_hash=payload_hash,
+            user_message=req.message,
+            user_message_id=user_message_id,
         ),
         media_type="text/event-stream",
     )
@@ -235,6 +239,8 @@ async def _stream_assistant(
     conversation_id: str,
     idempotency_key: str,
     payload_hash: str,
+    user_message: str,
+    user_message_id: int,
 ) -> AsyncIterator[bytes]:
     started_at = time.perf_counter()
     accumulated: list[str] = []
@@ -295,6 +301,35 @@ async def _stream_assistant(
             "assistant_message_id": assistant_msg_id,
             "latency_ms": latency_ms,
         },
+    )
+
+    # Fire-and-forget fact extraction (§7.2 row, §6.2 user_facts). Best-effort:
+    # the service swallows its own errors so a bad LLM round-trip can't reach
+    # the user. We don't await — the task runs after the response closes.
+    _schedule_fact_extraction(
+        user_id=user_id,
+        conversation_id=conversation_id,
+        user_message=user_message,
+        source_message_id=user_message_id,
+    )
+
+
+def _schedule_fact_extraction(
+    *,
+    user_id: str,
+    conversation_id: str,
+    user_message: str,
+    source_message_id: int,
+) -> None:
+    """Spawn the extraction coroutine. Module-level so tests can monkeypatch."""
+
+    asyncio.create_task(
+        fact_extraction.extract_and_persist(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            source_message_id=source_message_id,
+        )
     )
 
 

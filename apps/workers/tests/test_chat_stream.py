@@ -264,6 +264,11 @@ def wire_stubs(
     # The safety service grabs the client via get_llm_client unless passed.
     monkeypatch.setattr(safety_module, "get_llm_client", lambda: fake_llm)
 
+    # Fact extraction fires asyncio.create_task in production; stub it so the
+    # test can synchronously assert the schedule call (no race with the loop
+    # closing after the response). Individual tests that care override this.
+    monkeypatch.setattr(chat_route, "_schedule_fact_extraction", lambda **_: None)
+
     yield
     llm_module.set_llm_client(None)
 
@@ -450,6 +455,56 @@ def test_unknown_persona_slug_returns_404(client: TestClient) -> None:
     body["persona_slug"] = "does_not_exist"
     res = _post(client, body)
     assert res.status_code == 404
+
+
+def test_fact_extraction_is_scheduled_on_happy_path(
+    client: TestClient, fake_supabase: FakeSupabase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routes import chat as chat_route
+
+    calls: list[dict[str, Any]] = []
+
+    def _capture(**kwargs: Any) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(chat_route, "_schedule_fact_extraction", _capture)
+
+    res = _post(client, _base_body())
+    assert res.status_code == 200
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["user_id"] == USER_ID
+    assert call["user_message"] == _base_body()["message"]
+    # source_message_id is the persisted user-message row id.
+    user_row = next(m for m in fake_supabase.table("messages").rows if m["role"] == "user")
+    assert call["source_message_id"] == user_row["id"]
+
+
+def test_fact_extraction_not_scheduled_for_safety_refusal(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routes import chat as chat_route
+
+    crisis_llm = FakeLLM(
+        safety_payload={
+            "verdict": "crisis",
+            "confidence": 0.95,
+            "reason": "x",
+            "redactions": [],
+        },
+        stream_deltas=[],
+    )
+    llm_module.set_llm_client(crisis_llm)  # type: ignore[arg-type]
+    monkeypatch.setattr(chat_route, "get_llm_client", lambda: crisis_llm)
+    monkeypatch.setattr(safety_module, "get_llm_client", lambda: crisis_llm)
+
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(chat_route, "_schedule_fact_extraction", lambda **kw: calls.append(kw))
+
+    res = _post(client, _base_body())
+    assert res.status_code == 200
+    assert calls == []  # crisis refusal short-circuits before the stream loop
 
 
 def test_existing_conversation_belongs_to_other_user_returns_403(
