@@ -25,6 +25,7 @@ from app.services.quotas import (
 )
 from app.services.cope_detector import RATIONALIZATION_MAX_CHARS, run_cope_detector
 from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
+from app.services.past_self import PAST_CONTENT_MAX_CHARS, run_past_self
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
 from app.services.supabase_client import get_supabase
@@ -394,4 +395,75 @@ async def cope_detector(
         telling_yourself=run.result.telling_yourself,
         actually_avoiding=run.result.actually_avoiding,
         unasked_question=run.result.unasked_question,
+    )
+
+
+# ----- Past Self ------------------------------------------------------------
+
+
+class PastSelfRequest(BaseModel):
+    past_content: str = Field(min_length=20, max_length=PAST_CONTENT_MAX_CHARS)
+
+
+class PastSelfResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    rebuttal: str
+
+
+@router.post(
+    "/past-self",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def past_self(
+    req: PastSelfRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    # §9.1.5: counts as 1 message per turn.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.exceeded:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+            },
+        )
+
+    safety = await classify_message(
+        req.past_content,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    run = await run_past_self(
+        supabase,
+        user_id=user_id,
+        past_content=req.past_content,
+    )
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "past_self_failed")
+
+    await increment_message_count(supabase, user_id)
+
+    return PastSelfResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        rebuttal=run.rebuttal,
     )
