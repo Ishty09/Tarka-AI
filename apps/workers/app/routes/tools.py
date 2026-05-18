@@ -23,6 +23,7 @@ from app.services.quotas import (
     increment_council_count,
     increment_message_count,
 )
+from app.services.cope_detector import RATIONALIZATION_MAX_CHARS, run_cope_detector
 from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
@@ -318,4 +319,79 @@ async def decision_killer(
         ],
         one_reason_right=run.result.one_reason_right,
         actual_avoidance=run.result.actual_avoidance,
+    )
+
+
+# ----- Cope Detector --------------------------------------------------------
+
+
+class CopeDetectorRequest(BaseModel):
+    rationalization: str = Field(min_length=15, max_length=RATIONALIZATION_MAX_CHARS)
+
+
+class CopeDetectorResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    telling_yourself: str
+    actually_avoiding: str
+    unasked_question: str
+
+
+@router.post(
+    "/cope-detector",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def cope_detector(
+    req: CopeDetectorRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    # §9.5.2: counts as 1 message → chat-message quota.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.exceeded:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+            },
+        )
+
+    safety = await classify_message(
+        req.rationalization,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    run = await run_cope_detector(
+        supabase,
+        user_id=user_id,
+        rationalization=req.rationalization,
+    )
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "cope_detector_failed")
+
+    await increment_message_count(supabase, user_id)
+
+    return CopeDetectorResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        telling_yourself=run.result.telling_yourself,
+        actually_avoiding=run.result.actually_avoiding,
+        unasked_question=run.result.unasked_question,
     )
