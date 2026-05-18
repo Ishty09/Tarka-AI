@@ -81,14 +81,23 @@ async def get_message_quota(supabase: AsyncClient, user_id: str) -> QuotaState:
     return QuotaState(tier=tier, used=used, limit=limit, reset_at=reset_at)
 
 
-async def increment_message_count(supabase: AsyncClient, user_id: str) -> None:
-    """Add one to today's messages_used row.
+async def increment_message_count(
+    supabase: AsyncClient,
+    user_id: str,
+    *,
+    count: int = 1,
+) -> None:
+    """Add `count` to today's messages_used row (§9.3.3 tools like Breakup
+    Analyzer charge >1 per invocation).
 
     Inserts the row on first write of the day (the §6.5 PK is
     (user_id, period_start)). Subsequent writes increment via a Postgres
     function added with the §27 step 51 cron — until then we read-modify-
     write, which is racy but acceptable at our launch traffic.
     """
+
+    if count <= 0:
+        return
 
     today = date.today()
     period_start = today.isoformat()
@@ -110,7 +119,7 @@ async def increment_message_count(supabase: AsyncClient, user_id: str) -> None:
                 {
                     "user_id": user_id,
                     "period_start": period_start,
-                    "messages_used": 1,
+                    "messages_used": count,
                 }
             )
             .execute()
@@ -120,7 +129,7 @@ async def increment_message_count(supabase: AsyncClient, user_id: str) -> None:
     current = int(row.get("messages_used", 0) or 0)
     await (
         supabase.table("usage_quotas")
-        .update({"messages_used": current + 1})
+        .update({"messages_used": current + count})
         .eq("user_id", user_id)
         .eq("period_start", period_start)
         .execute()

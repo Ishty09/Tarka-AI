@@ -23,6 +23,12 @@ from app.services.quotas import (
     increment_council_count,
     increment_message_count,
 )
+from app.services.breakup_analyzer import (
+    DURATION_MAX_CHARS,
+    QUOTA_COST as BREAKUP_QUOTA_COST,
+    THREAD_MAX_CHARS,
+    run_breakup_analyzer,
+)
 from app.services.cope_detector import RATIONALIZATION_MAX_CHARS, run_cope_detector
 from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
 from app.services.future_self import FUTURE_DECISION_MAX_CHARS, run_future_self
@@ -679,4 +685,112 @@ async def negotiation_critique(
         strengths=result.critique.strengths,
         weaknesses=result.critique.weaknesses,
         alternative=result.critique.alternative,
+    )
+
+
+# ----- Breakup Analyzer -----------------------------------------------------
+
+
+class BreakupAnalyzerRequest(BaseModel):
+    text_thread: str = Field(min_length=50, max_length=THREAD_MAX_CHARS)
+    duration: str = Field(min_length=1, max_length=DURATION_MAX_CHARS)
+    user_age: int = Field(ge=16, le=120)
+    partner_age: int = Field(ge=16, le=120)
+    intent: Annotated[str, Field(pattern="^(repair|end)$")]
+
+
+class AttachmentDynamicsPayload(BaseModel):
+    user: str
+    partner: str
+    summary: str
+
+
+class SuggestedMessagePayload(BaseModel):
+    intent: str
+    text: str
+
+
+class BreakupAnalyzerResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    attachment_dynamics: AttachmentDynamicsPayload
+    reconciliation_likelihood: str
+    reconciliation_reasoning: str
+    missing_things: list[str]
+    suggested_message: SuggestedMessagePayload
+
+
+@router.post(
+    "/breakup-analyzer",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def breakup_analyzer(
+    req: BreakupAnalyzerRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    # §9.3.3: counts as 3 messages. Bail BEFORE the LLM call if the user
+    # can't afford the full charge.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.remaining < BREAKUP_QUOTA_COST:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+                "cost": BREAKUP_QUOTA_COST,
+            },
+        )
+
+    safety = await classify_message(
+        req.text_thread,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    intent_literal: Any = req.intent  # narrowed by the regex on the field
+    run = await run_breakup_analyzer(
+        supabase,
+        user_id=user_id,
+        text_thread=req.text_thread,
+        duration=req.duration,
+        user_age=req.user_age,
+        partner_age=req.partner_age,
+        intent=intent_literal,
+    )
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "breakup_analyzer_failed")
+
+    await increment_message_count(supabase, user_id, count=BREAKUP_QUOTA_COST)
+
+    return BreakupAnalyzerResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        attachment_dynamics=AttachmentDynamicsPayload(
+            user=run.result.attachment_dynamics.user,
+            partner=run.result.attachment_dynamics.partner,
+            summary=run.result.attachment_dynamics.summary,
+        ),
+        reconciliation_likelihood=run.result.reconciliation_likelihood,
+        reconciliation_reasoning=run.result.reconciliation_reasoning,
+        missing_things=run.result.missing_things,
+        suggested_message=SuggestedMessagePayload(
+            intent=run.result.suggested_message.intent,
+            text=run.result.suggested_message.text,
+        ),
     )
