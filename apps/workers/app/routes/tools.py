@@ -23,6 +23,7 @@ from app.services.quotas import (
     increment_council_count,
     increment_message_count,
 )
+from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
 from app.services.supabase_client import get_supabase
@@ -238,4 +239,83 @@ async def steelman(
             SteelmanCounterPayload(counter=c.counter, response=c.response)
             for c in run.result.counters
         ],
+    )
+
+
+# ----- Decision Killer ------------------------------------------------------
+
+
+class DecisionKillerRequest(BaseModel):
+    decision: str = Field(min_length=20, max_length=DECISION_MAX_CHARS)
+
+
+class WrongReasonPayload(BaseModel):
+    reason: str
+    argument: str
+
+
+class DecisionKillerResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    reasons_wrong: list[WrongReasonPayload]
+    one_reason_right: str
+    actual_avoidance: str
+
+
+@router.post(
+    "/decision-killer",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def decision_killer(
+    req: DecisionKillerRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    # §9.5.1: counts as 1 message → chat-message quota.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.exceeded:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+            },
+        )
+
+    safety = await classify_message(
+        req.decision,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    run = await run_decision_killer(supabase, user_id=user_id, decision=req.decision)
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "decision_killer_failed")
+
+    await increment_message_count(supabase, user_id)
+
+    return DecisionKillerResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        reasons_wrong=[
+            WrongReasonPayload(reason=r.reason, argument=r.argument)
+            for r in run.result.reasons_wrong
+        ],
+        one_reason_right=run.result.one_reason_right,
+        actual_avoidance=run.result.actual_avoidance,
     )
