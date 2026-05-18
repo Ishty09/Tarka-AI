@@ -19,10 +19,12 @@ from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
 from app.jobs.daily_roast import run_now as run_daily_roast_now
 from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
+from app.jobs.wager_evaluator import run_today as run_wager_eval_today
 from app.services.contradictions import run_batch
 from app.services.daily_roast import DEFAULT_WINDOW_MINUTES, run_window as run_daily_roast_window
 from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
+from app.services.wager_evaluator import run_due_evaluations
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -216,5 +218,55 @@ async def daily_roast(req: DailyRoastRequest) -> DailyRoastResponse:
         window_minutes=minutes,
         eligible=result.get("eligible", 0),
         delivered=result.get("delivered", 0),
+        skipped=result.get("skipped", 0),
+    )
+
+
+class WagerEvalRequest(BaseModel):
+    """Optional override of the cutoff date for backfill.
+
+    Default (none): evaluate every active wager whose end_at <= today.
+    Backfill: POST {"cutoff_date": "2026-05-01"} to evaluate wagers as
+    if today were that date (re-runs are idempotent because the persist
+    guard requires status='active').
+    """
+
+    cutoff_date: str | None = None
+
+
+class WagerEvalResponse(BaseModel):
+    cutoff: str
+    candidates: int
+    succeeded: int
+    failed: int
+    skipped: int
+
+
+@router.post(
+    "/wager-evaluator",
+    response_model=WagerEvalResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def wager_evaluator(req: WagerEvalRequest) -> WagerEvalResponse:
+    from datetime import date as _date
+
+    if req.cutoff_date is None:
+        result = await run_wager_eval_today()
+        cutoff_iso = datetime.now(UTC).date().isoformat()
+    else:
+        try:
+            cutoff = _date.fromisoformat(req.cutoff_date)
+        except ValueError as err:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "invalid_cutoff_date"
+            ) from err
+        result = await run_due_evaluations(cutoff_date=cutoff)
+        cutoff_iso = cutoff.isoformat()
+
+    return WagerEvalResponse(
+        cutoff=cutoff_iso,
+        candidates=result.get("candidates", 0),
+        succeeded=result.get("succeeded", 0),
+        failed=result.get("failed", 0),
         skipped=result.get("skipped", 0),
     )
