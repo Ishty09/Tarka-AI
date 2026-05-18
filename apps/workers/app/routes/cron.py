@@ -16,9 +16,11 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
+from app.jobs.daily_roast import run_now as run_daily_roast_now
 from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
 from app.services.contradictions import run_batch
+from app.services.daily_roast import DEFAULT_WINDOW_MINUTES, run_window as run_daily_roast_window
 from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
 
@@ -172,5 +174,47 @@ async def eulogy(req: EulogyBatchRequest) -> EulogyBatchResponse:
         period_end=end,
         eligible_users=result.get("eligible_users", 0),
         inserted=result.get("inserted", 0),
+        skipped=result.get("skipped", 0),
+    )
+
+
+class DailyRoastRequest(BaseModel):
+    """Optional override of the window length in minutes.
+
+    Default (none): use DEFAULT_WINDOW_MINUTES (15). Backfill / re-fire:
+    POST {"window_minutes": 60} expands the scan window for that run.
+    """
+
+    window_minutes: int | None = None
+    now_utc: datetime | None = None
+
+
+class DailyRoastResponse(BaseModel):
+    now: datetime
+    window_minutes: int
+    eligible: int
+    delivered: int
+    skipped: int
+
+
+@router.post(
+    "/daily-roast",
+    response_model=DailyRoastResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def daily_roast(req: DailyRoastRequest) -> DailyRoastResponse:
+    minutes = req.window_minutes or DEFAULT_WINDOW_MINUTES
+    if req.now_utc is None and req.window_minutes is None:
+        result = await run_daily_roast_now()
+        now = datetime.now(UTC)
+    else:
+        now = req.now_utc or datetime.now(UTC)
+        result = await run_daily_roast_window(now_utc=now, window_minutes=minutes)
+
+    return DailyRoastResponse(
+        now=now,
+        window_minutes=minutes,
+        eligible=result.get("eligible", 0),
+        delivered=result.get("delivered", 0),
         skipped=result.get("skipped", 0),
     )
