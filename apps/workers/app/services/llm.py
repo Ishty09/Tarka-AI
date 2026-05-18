@@ -73,6 +73,7 @@ class LiteLLMClient:
         model: str,
         messages: list[dict[str, Any]],
         temperature: float | None = None,
+        max_tokens: int | None = None,
         response_format: dict[str, str] | None = None,
         metadata: dict[str, Any] | None = None,
         user: str | None = None,
@@ -83,6 +84,8 @@ class LiteLLMClient:
         body: dict[str, Any] = {"model": model, "messages": messages}
         if temperature is not None:
             body["temperature"] = temperature
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
         if response_format is not None:
             body["response_format"] = response_format
         if metadata is not None:

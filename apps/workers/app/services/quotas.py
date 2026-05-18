@@ -35,6 +35,18 @@ MESSAGES_PER_DAY: dict[Tier, int] = {
 }
 
 
+# §8.1 council runs. Spec is free=1/week, pro=3/day, max=20/day. For MVP
+# we use a daily counter for every tier — free getting 1/day is slightly
+# more generous than 1/week, which we accept until §27 step 51 lands the
+# proper period-aware reset job. Note the variance in commit history when
+# we swap.
+COUNCIL_RUNS_PER_DAY: dict[Tier, int] = {
+    "free": 1,
+    "pro": 3,
+    "max": 20,
+}
+
+
 @dataclass(slots=True)
 class QuotaState:
     tier: Tier
@@ -109,6 +121,80 @@ async def increment_message_count(supabase: AsyncClient, user_id: str) -> None:
     await (
         supabase.table("usage_quotas")
         .update({"messages_used": current + 1})
+        .eq("user_id", user_id)
+        .eq("period_start", period_start)
+        .execute()
+    )
+
+
+async def get_council_quota(supabase: AsyncClient, user_id: str) -> QuotaState:
+    today = date.today()
+    reset_at = datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+    tier = await _read_tier(supabase, user_id)
+    limit = COUNCIL_RUNS_PER_DAY[tier]
+    used = await _read_counter(supabase, user_id, today, column="council_runs_used")
+    return QuotaState(tier=tier, used=used, limit=limit, reset_at=reset_at)
+
+
+async def increment_council_count(supabase: AsyncClient, user_id: str) -> None:
+    await _increment_counter(supabase, user_id, column="council_runs_used")
+
+
+async def _read_counter(
+    supabase: AsyncClient,
+    user_id: str,
+    period: date,
+    *,
+    column: str,
+) -> int:
+    res = (
+        await supabase.table("usage_quotas")
+        .select(column)
+        .eq("user_id", user_id)
+        .eq("period_start", period.isoformat())
+        .maybe_single()
+        .execute()
+    )
+    row = row_or_none(res.data) if res is not None else None
+    if row is None:
+        return 0
+    return int(row.get(column, 0) or 0)
+
+
+async def _increment_counter(
+    supabase: AsyncClient, user_id: str, *, column: str
+) -> None:
+    today = date.today()
+    period_start = today.isoformat()
+
+    existing = (
+        await supabase.table("usage_quotas")
+        .select(column)
+        .eq("user_id", user_id)
+        .eq("period_start", period_start)
+        .maybe_single()
+        .execute()
+    )
+    row = row_or_none(existing.data) if existing is not None else None
+
+    if row is None:
+        await (
+            supabase.table("usage_quotas")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "period_start": period_start,
+                    column: 1,
+                }
+            )
+            .execute()
+        )
+        return
+
+    current = int(row.get(column, 0) or 0)
+    await (
+        supabase.table("usage_quotas")
+        .update({column: current + 1})
         .eq("user_id", user_id)
         .eq("period_start", period_start)
         .execute()
