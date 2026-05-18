@@ -159,6 +159,83 @@ export async function createWager(
   };
 }
 
+// ----- Daily check-in (§9.5.5 step 6) --------------------------------------
+//
+// Upsert on (wager_id, checkin_date) so re-clicking corrects the same day
+// (e.g. user clicks "missed" by accident, then "completed" with a note).
+// The evaluator (step 40) reads the rows after end_at.
+
+const checkinSchema = z.object({
+  wager_id: z.string().uuid(),
+  checkin_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  status: z.enum(["completed", "missed", "skipped"]),
+  notes: z.string().max(1000).optional(),
+  proof_url: z.string().url().optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
+});
+
+export async function createCheckin(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = checkinSchema.safeParse({
+    wager_id: formData.get("wager_id"),
+    checkin_date: formData.get("checkin_date"),
+    status: formData.get("status"),
+    notes: formData.get("notes")?.toString().trim() || undefined,
+    proof_url: formData.get("proof_url")?.toString().trim() || "",
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Verify the wager belongs to the user and is in a check-in-able state.
+  // We don't allow check-ins outside [start_at, end_at] — the evaluator
+  // (step 40) only looks at rows in that window, and silent acceptance
+  // would confuse "actually checked in" with "missed".
+  const { data: wager } = await supabase
+    .from("wagers")
+    .select("id, user_id, start_at, end_at, status")
+    .eq("id", parsed.data.wager_id)
+    .maybeSingle();
+  if (!wager || wager.user_id !== user.id) {
+    return { ok: false, error: "Wager not found." };
+  }
+  if (wager.status !== "active") {
+    return { ok: false, error: `Wager is ${wager.status} — can't check in.` };
+  }
+  if (
+    parsed.data.checkin_date < wager.start_at
+    || parsed.data.checkin_date > wager.end_at
+  ) {
+    return { ok: false, error: "Date is outside the wager window." };
+  }
+
+  const { error } = await supabase
+    .from("wager_checkins")
+    .upsert(
+      {
+        wager_id: parsed.data.wager_id,
+        user_id: user.id,
+        checkin_date: parsed.data.checkin_date,
+        status: parsed.data.status,
+        notes: parsed.data.notes ?? null,
+        proof_url: parsed.data.proof_url ?? null,
+      },
+      { onConflict: "wager_id,checkin_date" },
+    );
+  if (error) {
+    return { ok: false, error: "Couldn't save check-in." };
+  }
+
+  revalidatePath(`/wagers/${parsed.data.wager_id}`);
+  return { ok: true };
+}
+
+
 // ----- Cancel pending / refund-pending wager --------------------------------
 
 const idSchema = z.object({ id: z.string().uuid() });

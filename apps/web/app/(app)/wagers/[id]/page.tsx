@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { formatCents, wagerDurationDays } from "@/lib/wagers";
 import { cancelPendingWager } from "../actions";
+import { CheckinPanel } from "./CheckinPanel";
 
 // Wager detail (§9.5.5). Renders the goal, dates, stake, anti-charity,
 // status, and (in step 39) the daily check-in. Step 38 ships the read-
@@ -147,14 +148,43 @@ export default async function WagerDetailPage({ params }: PageProps) {
       )}
 
       {wager.status === "active" && (
-        <section className="mt-6 rounded-md border border-input bg-muted/30 p-4 text-sm">
-          <p className="text-muted-foreground">
-            Daily check-ins ship in the next step. For now your start/end
-            dates are committed; the evaluator runs on or after {new Date(wager.end_at).toLocaleDateString()}.
-          </p>
-        </section>
+        <ActiveCheckins wagerId={wager.id} startAt={wager.start_at} endAt={wager.end_at} />
       )}
     </main>
+  );
+}
+
+async function ActiveCheckins({
+  wagerId,
+  startAt,
+  endAt,
+}: {
+  wagerId: string;
+  startAt: string;
+  endAt: string;
+}) {
+  const supabase = await createServerSupabase();
+  const { data: checkinsData } = await supabase
+    .from("wager_checkins")
+    .select("checkin_date, status, notes, proof_url")
+    .eq("wager_id", wagerId)
+    .order("checkin_date", { ascending: true })
+    .limit(400);
+  const checkins = (checkinsData ?? []) as Array<{
+    checkin_date: string;
+    status: "completed" | "missed" | "skipped";
+    notes: string | null;
+    proof_url: string | null;
+  }>;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  return (
+    <CheckinPanel
+      wagerId={wagerId}
+      startAt={startAt}
+      endAt={endAt}
+      todayIso={todayIso}
+      checkins={checkins}
+    />
   );
 }
 
