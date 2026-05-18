@@ -25,6 +25,7 @@ from app.services.quotas import (
 )
 from app.services.cope_detector import RATIONALIZATION_MAX_CHARS, run_cope_detector
 from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
+from app.services.future_self import FUTURE_DECISION_MAX_CHARS, run_future_self
 from app.services.past_self import PAST_CONTENT_MAX_CHARS, run_past_self
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
@@ -466,4 +467,71 @@ async def past_self(
         conversation_id=run.conversation_id or "",
         assistant_message_id=run.assistant_message_id,
         rebuttal=run.rebuttal,
+    )
+
+
+# ----- Future Self ----------------------------------------------------------
+
+
+class FutureSelfRequest(BaseModel):
+    decision: str = Field(min_length=20, max_length=FUTURE_DECISION_MAX_CHARS)
+
+
+class FutureSelfResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    message: str
+
+
+@router.post(
+    "/future-self",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def future_self(
+    req: FutureSelfRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    # §9.1.6: standard quota → chat-message bucket.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.exceeded:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+            },
+        )
+
+    safety = await classify_message(
+        req.decision,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    run = await run_future_self(supabase, user_id=user_id, decision=req.decision)
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "future_self_failed")
+
+    await increment_message_count(supabase, user_id)
+
+    return FutureSelfResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        message=run.message,
     )
