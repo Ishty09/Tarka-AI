@@ -40,6 +40,12 @@ from app.services.negotiation import (
     start_session,
 )
 from app.services.past_self import PAST_CONTENT_MAX_CHARS, run_past_self
+from app.services.roast_my_x import (
+    CONTENT_MAX_CHARS as ROAST_CONTENT_MAX_CHARS,
+    UnknownTargetError,
+    is_known_target,
+    run_roast_my_x,
+)
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
 from app.services.supabase_client import get_supabase
@@ -793,4 +799,86 @@ async def breakup_analyzer(
             intent=run.result.suggested_message.intent,
             text=run.result.suggested_message.text,
         ),
+    )
+
+
+# ----- Roast My X -----------------------------------------------------------
+
+
+class RoastMyXRequest(BaseModel):
+    target: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=20, max_length=ROAST_CONTENT_MAX_CHARS)
+
+
+class RoastMyXResponse(BaseModel):
+    conversation_id: str
+    assistant_message_id: int | None
+    target: str
+    roast: str
+
+
+@router.post(
+    "/roast-my-x",
+    dependencies=[Depends(_verify_internal_caller)],
+    responses={429: {"model": QuotaExceededResponse}},
+)
+async def roast_my_x(
+    req: RoastMyXRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> Any:
+    supabase = await get_supabase()
+
+    if not is_known_target(req.target):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown_roast_target")
+
+    # §9.2.2: counts as 1 message.
+    quota = await get_message_quota(supabase, user_id)
+    if quota.exceeded:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "quota_exceeded",
+                "tier": quota.tier,
+                "limit": quota.limit,
+                "used": quota.used,
+                "reset_at": quota.reset_at.isoformat(),
+                "upgrade_url": "/pricing",
+            },
+        )
+
+    safety = await classify_message(
+        req.content,
+        user_id=user_id,
+        conversation_id=None,
+    )
+    if safety.verdict != "safe":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "safety_blocked",
+                "verdict": safety.verdict,
+                "reason": safety.reason,
+            },
+        )
+
+    try:
+        run = await run_roast_my_x(
+            supabase,
+            user_id=user_id,
+            target=req.target,
+            content=req.content,
+        )
+    except UnknownTargetError as err:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown_roast_target") from err
+
+    if run is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "roast_my_x_failed")
+
+    await increment_message_count(supabase, user_id)
+
+    return RoastMyXResponse(
+        conversation_id=run.conversation_id or "",
+        assistant_message_id=run.assistant_message_id,
+        target=run.target,
+        roast=run.roast,
     )
