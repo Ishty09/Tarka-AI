@@ -1,7 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { serverEnv } from "@/lib/env";
+import type { ChatTurn } from "@/app/(app)/chat/_components/useChatStream";
 import { archiveGroup, leaveGroup } from "../actions";
+import { GroupChat } from "./GroupChat";
 
 // /groups/[groupId] (§9.3.4). Members + invite display. The actual chat
 // surface lands in step 37 once AI turn-taking + Realtime are wired.
@@ -66,6 +69,76 @@ export default async function GroupDetailPage({ params }: PageProps) {
   const inviteUrl = room.invite_code
     ? `/groups/join/${room.invite_code}`
     : null;
+
+  // For active rooms, open the shared conversation via workers and hand
+  // off to GroupChat. Errors fall through to the lobby view below.
+  if (!room.archived && serverEnv.WORKERS_INTERNAL_SECRET) {
+    const upstream = await fetch(`${serverEnv.WORKERS_URL}/tools/groups/start`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+        "x-user-id": user.id,
+      },
+      body: JSON.stringify({ group_id: room.id }),
+      cache: "no-store",
+    });
+    if (upstream.ok) {
+      const { conversation_id: conversationId } = (await upstream.json()) as {
+        conversation_id: string;
+      };
+      const { data: messageRowsRaw } = await supabase
+        .from("messages")
+        .select("id, role, content, redacted_content, user_id, safety_verdict")
+        .eq("conversation_id", conversationId)
+        .in("role", ["user", "assistant"])
+        .order("id", { ascending: true })
+        .limit(200);
+      const messageRows = (messageRowsRaw ?? []) as Array<{
+        id: number;
+        role: string;
+        content: string;
+        redacted_content: string | null;
+        user_id: string | null;
+        safety_verdict: string | null;
+      }>;
+      const memberLookup = new Map<string, string>();
+      for (const m of members) {
+        const p = unwrap(m.profile);
+        memberLookup.set(
+          m.user_id,
+          p?.display_name ?? p?.username ?? "Member",
+        );
+      }
+      const initialMessages: ChatTurn[] = messageRows.map((m) => ({
+        id: String(m.id),
+        role: m.role as "user" | "assistant",
+        content: m.redacted_content ?? m.content,
+        persistedMessageId: m.id,
+        authorId: m.user_id ?? undefined,
+        authorName:
+          m.role === "assistant"
+            ? mediator?.name ?? "Mediator"
+            : m.user_id
+            ? memberLookup.get(m.user_id) ?? "Member"
+            : undefined,
+        ...(m.safety_verdict && m.safety_verdict !== "safe"
+          ? { safetyVerdict: m.safety_verdict }
+          : {}),
+      }));
+
+      return (
+        <GroupChat
+          groupId={room.id}
+          conversationId={conversationId}
+          currentUserId={user.id}
+          mediatorName={mediator?.name ?? "Mediator"}
+          members={Array.from(memberLookup.entries()).map(([id, name]) => ({ id, name }))}
+          initialMessages={initialMessages}
+        />
+      );
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-2xl p-6">

@@ -53,6 +53,12 @@ from app.services.couples import (
     NotALinkMemberError,
     start_couple_session,
 )
+from app.services.groups import (
+    GroupArchivedError,
+    GroupNotFoundError,
+    NotAGroupMemberError,
+    start_group_session,
+)
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
 from app.services.supabase_client import get_supabase
@@ -980,4 +986,54 @@ async def couples_start(
         conversation_id=session.conversation_id,
         user_a=session.user_a,
         user_b=session.user_b,
+    )
+
+
+# ----- Group rooms (§9.3.4) -------------------------------------------------
+
+
+class GroupStartRequest(BaseModel):
+    group_id: str = Field(min_length=8, max_length=64)
+
+
+class GroupStartResponse(BaseModel):
+    group_id: str
+    conversation_id: str
+    mediator_persona_id: str
+    member_ids: list[str]
+
+
+@router.post(
+    "/groups/start",
+    dependencies=[Depends(_verify_internal_caller)],
+    response_model=GroupStartResponse,
+)
+async def groups_start(
+    req: GroupStartRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> GroupStartResponse:
+    """Find or create the shared conversation for an active group room.
+
+    Idempotent — repeat calls return the same conversation_id.
+    """
+
+    supabase = await get_supabase()
+    try:
+        session = await start_group_session(
+            supabase,
+            user_id=user_id,
+            group_id=req.group_id,
+        )
+    except GroupNotFoundError as err:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "group_not_found") from err
+    except GroupArchivedError as err:
+        raise HTTPException(status.HTTP_409_CONFLICT, "group_archived") from err
+    except NotAGroupMemberError as err:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_group_member") from err
+
+    return GroupStartResponse(
+        group_id=session.group_id,
+        conversation_id=session.conversation_id,
+        mediator_persona_id=session.mediator_persona_id,
+        member_ids=session.member_ids,
     )

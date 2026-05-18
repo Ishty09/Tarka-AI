@@ -29,6 +29,9 @@ export interface ChatTurn {
   contradiction?: ContradictionCallout;
   /** DB row id once the worker persisted this turn. Required for /feed sharing. */
   persistedMessageId?: number;
+  /** Used in group rooms (§9.3.4) to attribute multi-author messages. */
+  authorId?: string;
+  authorName?: string;
 }
 
 export interface QuotaExceeded {

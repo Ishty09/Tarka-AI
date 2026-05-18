@@ -56,6 +56,10 @@ from app.services.memory import (
     load_user_facts,
     mark_contradiction_surfaced,
 )
+from app.services.groups import (
+    AI_TURN_TAKING_THRESHOLD,
+    count_recent_consecutive_humans,
+)
 from app.services.quotas import get_message_quota, increment_message_count
 from app.services.safety import classify_message, redact
 from app.services.supabase_client import get_supabase
@@ -206,6 +210,28 @@ async def chat_stream(
         redacted_content=None,
         safety_verdict="safe",
     )
+
+    # ----- Group rooms (§9.3.4): AI intervenes only every 3rd human turn -----
+    if conversation.get("group_room_id"):
+        streak = await count_recent_consecutive_humans(
+            supabase,
+            conversation_id=conversation["id"],
+        )
+        if streak < AI_TURN_TAKING_THRESHOLD:
+            log.info(
+                "chat.group.deferred",
+                group_id=conversation.get("group_room_id"),
+                streak=streak,
+                threshold=AI_TURN_TAKING_THRESHOLD,
+            )
+            return StreamingResponse(
+                _group_saved_stream(
+                    user_message_id=user_message_id,
+                    streak=streak,
+                    threshold=AI_TURN_TAKING_THRESHOLD,
+                ),
+                media_type="text/event-stream",
+            )
 
     # ----- Assemble messages + stream ----------------------------------------
     system_blocks, fact_ids = await _build_system_blocks(
@@ -401,8 +427,10 @@ async def _resolve_conversation(
 
         # Ownership check. For couple-link conversations (§9.3.1) either
         # partner is allowed to post — both share the same conversation row.
+        # For group rooms (§9.3.4) any current group member is allowed.
         if row.get("user_id") != user_id:
             link_id = row.get("couple_link_id")
+            group_id = row.get("group_room_id")
             allowed = False
             if link_id:
                 link_res = (
@@ -419,6 +447,28 @@ async def _resolve_conversation(
                     and user_id in (link_row.get("user_a"), link_row.get("user_b"))
                 ):
                     allowed = True
+            if not allowed and group_id:
+                # group_members is the source of truth for membership.
+                # group_rooms.archived gates the whole row separately.
+                room_res = (
+                    await supabase.table("group_rooms")
+                    .select("archived")
+                    .eq("id", group_id)
+                    .maybe_single()
+                    .execute()
+                )
+                room_row = row_or_none(room_res.data) if room_res is not None else None
+                if room_row is not None and not room_row.get("archived"):
+                    member_res = (
+                        await supabase.table("group_members")
+                        .select("user_id")
+                        .eq("group_id", group_id)
+                        .eq("user_id", user_id)
+                        .maybe_single()
+                        .execute()
+                    )
+                    if member_res is not None and row_or_none(member_res.data) is not None:
+                        allowed = True
             if not allowed:
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "not_conversation_owner")
 
@@ -439,6 +489,7 @@ async def _resolve_conversation(
             "persona_system_prompt": system_prompt,
             "system_prompt_overridden": override is not None,
             "couple_link_id": row.get("couple_link_id"),
+            "group_room_id": row.get("group_room_id"),
         }
 
     if persona_slug is None:
@@ -646,6 +697,31 @@ def _sse_event(name: str, data: dict[str, Any]) -> bytes:
 async def _refusal_stream(verdict: str, reason: str) -> AsyncIterator[bytes]:
     yield _sse_event("safety", {"verdict": verdict, "reason": reason})
     yield _sse_event("done", {"finish_reason": "safety_refusal"})
+
+
+async def _group_saved_stream(
+    *,
+    user_message_id: int,
+    streak: int,
+    threshold: int,
+) -> AsyncIterator[bytes]:
+    """SSE stream for group turns where the AI doesn't reply yet (§9.3.4).
+
+    Emits a single `group_saved` event so the client can ack the turn,
+    then closes with `done`. The Realtime subscription on `messages` is
+    what makes the post visible to other members — this SSE just confirms
+    persistence to the sender.
+    """
+
+    yield _sse_event(
+        "group_saved",
+        {
+            "user_message_id": user_message_id,
+            "consecutive_humans": streak,
+            "ai_threshold": threshold,
+        },
+    )
+    yield _sse_event("done", {"finish_reason": "group_no_ai_yet"})
 
 
 def _replay_stream(body: dict[str, Any]) -> StreamingResponse:
