@@ -50,7 +50,9 @@ from app.services.llm import (
 )
 from app.services.memory import (
     ContradictionCallout,
+    UserFactsBundle,
     find_relevant_contradiction,
+    load_couple_facts,
     load_user_facts,
     mark_contradiction_surfaced,
 )
@@ -211,6 +213,7 @@ async def chat_stream(
         user_id=user_id,
         persona_system_prompt=conversation["persona_system_prompt"],
         query_message=req.message,
+        couple_link_id=conversation.get("couple_link_id"),
     )
     # §9.4.4 inline callout: surface at most one unsurfaced contradiction
     # whose facts overlap with the retrieved memory bundle.
@@ -435,6 +438,7 @@ async def _resolve_conversation(
             "id": str(row["id"]),
             "persona_system_prompt": system_prompt,
             "system_prompt_overridden": override is not None,
+            "couple_link_id": row.get("couple_link_id"),
         }
 
     if persona_slug is None:
@@ -451,7 +455,11 @@ async def _resolve_conversation(
         "group_room_id": group_room_id,
     }
     await supabase.table("conversations").insert(insert_payload).execute()
-    return {"id": new_id, "persona_system_prompt": persona["system_prompt"]}
+    return {
+        "id": new_id,
+        "persona_system_prompt": persona["system_prompt"],
+        "couple_link_id": couple_link_id,
+    }
 
 
 async def _load_persona_by_id(supabase: AsyncClient, persona_id: str) -> dict[str, Any]:
@@ -488,6 +496,7 @@ async def _build_system_blocks(
     user_id: str,
     persona_system_prompt: str,
     query_message: str,
+    couple_link_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """Assemble the system message as cache-controlled content blocks.
 
@@ -498,19 +507,39 @@ async def _build_system_blocks(
       2. <user_facts> block — rotates per turn but still worth marking so
          repeat turns within a short window benefit.
 
-    Both blocks use `cache_control: ephemeral` because Anthropic's 1-hour
-    cache is beta and not in our locked stack — when it lands we can flip
-    the static block to "persistent" without touching call sites.
+    Couples conversations (§9.3.1): if a couple_link_id is set, we first
+    try load_couple_facts (which calls the triple-consent-gated SQL
+    function). If it returns a non-empty bundle, both partners' facts
+    feed the mediator. If consent is missing the function raises and
+    load_couple_facts returns empty — we fall back to single-user
+    embedding retrieval so the mediator still sees the caller's own
+    facts.
 
     Mirrors packages/ai/src/caching.ts buildSystemMessage().
     """
 
-    facts = await load_user_facts(supabase, user_id, query_message=query_message)
-    log.info(
-        "chat.system_prompt.facts",
-        user_id=user_id,
-        fact_count=facts.count,
-    )
+    facts: UserFactsBundle | None = None
+    if couple_link_id:
+        couple_bundle = await load_couple_facts(
+            supabase,
+            link_id=str(couple_link_id),
+        )
+        if couple_bundle.count > 0:
+            facts = couple_bundle
+            log.info(
+                "chat.system_prompt.couple_facts",
+                user_id=user_id,
+                link_id=couple_link_id,
+                fact_count=facts.count,
+            )
+
+    if facts is None:
+        facts = await load_user_facts(supabase, user_id, query_message=query_message)
+        log.info(
+            "chat.system_prompt.facts",
+            user_id=user_id,
+            fact_count=facts.count,
+        )
 
     blocks: list[dict[str, Any]] = [
         {

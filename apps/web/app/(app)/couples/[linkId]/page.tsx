@@ -6,6 +6,7 @@ import { env, serverEnv } from "@/lib/env";
 import type { ChatTurn } from "@/app/(app)/chat/_components/useChatStream";
 import { revokeLink } from "../actions";
 import { CouplesChat } from "./CouplesChat";
+import { CrossFactConsent } from "./CrossFactConsent";
 
 // /couples/[linkId] (§9.3.1). Three rendered states:
 //   - pending: copy-the-invite UI for the creator; "waiting" for the
@@ -144,14 +145,26 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
       },
     };
 
+    const youAreA = link.user_a === user.id;
+    const yourConsent = youAreA ? link.cross_fact_consent_a : link.cross_fact_consent_b;
+    const partnerConsent = youAreA ? link.cross_fact_consent_b : link.cross_fact_consent_a;
+
     return (
-      <CouplesChat
-        conversationId={conversationId}
-        currentUserId={user.id}
-        partners={partners}
-        initialMessages={initialMessages}
-        initialTitle="Couples chat"
-      />
+      <div className="flex flex-col">
+        <CrossFactConsent
+          linkId={link.id}
+          yourConsent={yourConsent}
+          partnerConsent={partnerConsent}
+          partnerName={partnerName}
+        />
+        <CouplesChat
+          conversationId={conversationId}
+          currentUserId={user.id}
+          partners={partners}
+          initialMessages={initialMessages}
+          initialTitle="Couples chat"
+        />
+      </div>
     );
   }
 

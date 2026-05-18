@@ -124,6 +124,76 @@ async def load_user_facts(
     return UserFactsBundle(text="\n".join(lines), count=len(matches), fact_ids=fact_ids)
 
 
+async def load_couple_facts(
+    supabase: AsyncClient,
+    *,
+    link_id: str,
+    limit: int = 30,
+) -> UserFactsBundle:
+    """Pull both partners' active facts via the get_couple_facts RPC (§6.7).
+
+    The SQL function enforces the triple-consent gate (link active + both
+    base consents + both cross-fact consents) AND writes an audit_log row
+    per retrieval. If consent is missing, the function raises and we
+    return an empty bundle — callers fall back to single-user retrieval.
+
+    Owner labelling: rows from user_a get [partner=A], user_b get
+    [partner=B]. The mediator picks up the convention from the rest of
+    the conversation history.
+    """
+
+    try:
+        res = await supabase.rpc(
+            "get_couple_facts",
+            {"p_couple_link_id": link_id},
+        ).execute()
+    except Exception as err:  # noqa: BLE001 — consent gate raises in plpgsql
+        log.info("memory.couple_facts.gate_closed", link_id=link_id, error=str(err)[:200])
+        return UserFactsBundle(text="", count=0, fact_ids=[])
+
+    rows = _rows(res.data)
+    if not rows:
+        return UserFactsBundle(text="", count=0, fact_ids=[])
+
+    # Resolve A/B labels from the link itself. The SQL function returns
+    # owner_id; we map it to A or B so the mediator sees a stable
+    # convention regardless of who's currently asking.
+    link_res = (
+        await supabase.table("couple_links")
+        .select("user_a, user_b")
+        .eq("id", link_id)
+        .maybe_single()
+        .execute()
+    )
+    link_row = link_res.data if link_res is not None else None
+    user_a = str(link_row["user_a"]) if isinstance(link_row, dict) and link_row.get("user_a") else None
+    user_b = str(link_row["user_b"]) if isinstance(link_row, dict) and link_row.get("user_b") else None
+
+    lines: list[str] = []
+    fact_ids: list[int] = []
+    for row in rows[:limit]:
+        owner = str(row.get("owner_id") or "")
+        label = "A" if owner == user_a else "B" if owner == user_b else "?"
+        category = row.get("category") or "uncategorized"
+        fact = row.get("fact") or ""
+        created = row.get("created_at")
+        created_str = str(created)[:10] if created else "?"
+        confidence = row.get("confidence")
+        try:
+            conf_str = f"conf={float(confidence):.2f}" if confidence is not None else "conf=?"
+        except (TypeError, ValueError):
+            conf_str = "conf=?"
+        lines.append(
+            f"- [partner={label}, {category}] {fact}  (since {created_str}, {conf_str})"
+        )
+        if "id" in row:
+            try:
+                fact_ids.append(int(row["id"]))
+            except (TypeError, ValueError):
+                pass
+    return UserFactsBundle(text="\n".join(lines), count=len(rows), fact_ids=fact_ids)
+
+
 async def find_relevant_contradiction(
     supabase: AsyncClient,
     user_id: str,

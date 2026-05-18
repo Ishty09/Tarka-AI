@@ -162,6 +162,55 @@ export async function acceptInvite(
 
 const idSchema = z.object({ id: z.string().uuid() });
 
+// ----- Cross-fact consent toggle (§9.3.1 step 4) ----------------------------
+//
+// Each user toggles only their own column. When BOTH cross_fact_consent_a
+// and cross_fact_consent_b flip to true (AND both base consents are set,
+// AND the link is active), the SQL function get_couple_facts() (defined
+// in 20260516121100_couple_facts_function.sql) starts returning both
+// partners' active facts to the chat route. The function writes an
+// audit_log row on every retrieval.
+
+const consentSchema = z.object({
+  link_id: z.string().uuid(),
+  enabled: z.union([z.literal("true"), z.literal("false")]).transform((v) => v === "true"),
+});
+
+export async function setCrossFactConsent(formData: FormData): Promise<void> {
+  const parsed = consentSchema.safeParse({
+    link_id: formData.get("link_id"),
+    enabled: formData.get("enabled"),
+  });
+  if (!parsed.success) return;
+
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: link } = await supabase
+    .from("couple_links")
+    .select("id, user_a, user_b")
+    .eq("id", parsed.data.link_id)
+    .maybeSingle();
+  if (!link) return;
+
+  const column =
+    link.user_a === user.id
+      ? "cross_fact_consent_a"
+      : link.user_b === user.id
+      ? "cross_fact_consent_b"
+      : null;
+  if (column === null) return; // caller isn't a member; RLS would also reject
+
+  await supabase
+    .from("couple_links")
+    .update({ [column]: parsed.data.enabled })
+    .eq("id", parsed.data.link_id);
+
+  revalidatePath(`/couples/${parsed.data.link_id}`);
+}
+
+
 export async function revokeLink(formData: FormData): Promise<void> {
   const parsed = idSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return;
