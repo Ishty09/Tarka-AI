@@ -39,6 +39,7 @@ from app.services.negotiation import (
     run_critique,
     start_session,
 )
+from app.services.moderation import ModerationKind, moderate
 from app.services.past_self import PAST_CONTENT_MAX_CHARS, run_past_self
 from app.services.roast_my_x import (
     CONTENT_MAX_CHARS as ROAST_CONTENT_MAX_CHARS,
@@ -881,4 +882,44 @@ async def roast_my_x(
         assistant_message_id=run.assistant_message_id,
         target=run.target,
         roast=run.roast,
+    )
+
+
+# ----- Moderation -----------------------------------------------------------
+
+
+class ModerationRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
+    kind: ModerationKind
+
+
+class ModerationResponse(BaseModel):
+    action: str
+    reason: str
+    categories: list[str]
+
+
+@router.post(
+    "/moderate",
+    dependencies=[Depends(_verify_internal_caller)],
+    response_model=ModerationResponse,
+)
+async def moderate_content(
+    req: ModerationRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> ModerationResponse:
+    """Generic auto-moderation. Called by /api/feed/submit (§9.2.5) and by
+    persona-marketplace submission (§10.2 deferred). Does NOT cost quota
+    because the user is paying through the parent action.
+    """
+
+    result = await moderate(
+        content=req.content,
+        kind=req.kind,
+        user_id=user_id,
+    )
+    return ModerationResponse(
+        action=result.action,
+        reason=result.reason,
+        categories=result.categories,
     )
