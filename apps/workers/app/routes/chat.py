@@ -387,7 +387,7 @@ async def _resolve_conversation(
     if conversation_id is not None:
         existing = (
             await supabase.table("conversations")
-            .select("id, user_id, persona_id, mode")
+            .select("id, user_id, persona_id, mode, metadata")
             .eq("id", conversation_id)
             .maybe_single()
             .execute()
@@ -399,7 +399,22 @@ async def _resolve_conversation(
             raise HTTPException(status.HTTP_403_FORBIDDEN, "not_conversation_owner")
 
         persona = await _load_persona_by_id(supabase, str(row["persona_id"]))
-        return {"id": str(row["id"]), "persona_system_prompt": persona["system_prompt"]}
+        # Negotiation Sparring (§9.5.3) and any future scenario-driven mode
+        # writes a `system_prompt_override` into metadata. When present, we
+        # use it INSTEAD of the persona's system_prompt so the roleplayed
+        # counterparty stays in character across turns.
+        metadata = row.get("metadata") or {}
+        override = None
+        if isinstance(metadata, dict):
+            candidate = metadata.get("system_prompt_override")
+            if isinstance(candidate, str) and candidate.strip():
+                override = candidate
+        system_prompt = override or persona["system_prompt"]
+        return {
+            "id": str(row["id"]),
+            "persona_system_prompt": system_prompt,
+            "system_prompt_overridden": override is not None,
+        }
 
     if persona_slug is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "persona_required_for_new_conversation")
