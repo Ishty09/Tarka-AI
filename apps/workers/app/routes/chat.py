@@ -387,7 +387,7 @@ async def _resolve_conversation(
     if conversation_id is not None:
         existing = (
             await supabase.table("conversations")
-            .select("id, user_id, persona_id, mode, metadata")
+            .select("id, user_id, persona_id, mode, metadata, couple_link_id")
             .eq("id", conversation_id)
             .maybe_single()
             .execute()
@@ -395,8 +395,29 @@ async def _resolve_conversation(
         row = row_or_none(existing.data) if existing is not None else None
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation_not_found")
+
+        # Ownership check. For couple-link conversations (§9.3.1) either
+        # partner is allowed to post — both share the same conversation row.
         if row.get("user_id") != user_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "not_conversation_owner")
+            link_id = row.get("couple_link_id")
+            allowed = False
+            if link_id:
+                link_res = (
+                    await supabase.table("couple_links")
+                    .select("user_a, user_b, status")
+                    .eq("id", link_id)
+                    .maybe_single()
+                    .execute()
+                )
+                link_row = row_or_none(link_res.data) if link_res is not None else None
+                if (
+                    link_row is not None
+                    and link_row.get("status") == "active"
+                    and user_id in (link_row.get("user_a"), link_row.get("user_b"))
+                ):
+                    allowed = True
+            if not allowed:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "not_conversation_owner")
 
         persona = await _load_persona_by_id(supabase, str(row["persona_id"]))
         # Negotiation Sparring (§9.5.3) and any future scenario-driven mode

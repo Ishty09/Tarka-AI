@@ -1,12 +1,19 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { env, serverEnv } from "@/lib/env";
+import type { ChatTurn } from "@/app/(app)/chat/_components/useChatStream";
 import { revokeLink } from "../actions";
+import { CouplesChat } from "./CouplesChat";
 
-// /couples/[linkId] — single-link detail.
-// §9.3.1 lists four UI states (pending / awaiting-consent / active /
-// revoked); step 33 ships the pending + active shells. Step 34 brings
-// in the shared chat; step 35 brings the cross-fact consent toggle.
+// /couples/[linkId] (§9.3.1). Three rendered states:
+//   - pending: copy-the-invite UI for the creator; "waiting" for the
+//     accepter (shouldn't normally be reached by user_b since accept
+//     redirects here once active).
+//   - active: starts the shared conversation (idempotent worker call) and
+//     hands off to CouplesChat for the actual chat surface.
+//   - revoked / expired: archive copy.
 
 interface PageProps {
   params: Promise<{ linkId: string }>;
@@ -55,13 +62,107 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
   const otherProfile = unwrap(youAreCreator ? link.partner_b : link.partner_a);
   const partnerName = otherProfile?.display_name ?? otherProfile?.username ?? "your partner";
 
+  if (link.status === "active") {
+    // Start (or find) the shared conversation via workers. Server-side
+    // fetch with the user's cookie session forwarded as bearer through
+    // /api/couples/start would require a circular fetch — call workers
+    // directly with the internal secret here.
+    const cookieHeader = (await headers()).get("cookie") ?? "";
+    void cookieHeader; // unused — kept for clarity if we route through web later
+    let conversationId: string | null = null;
+    let conversationError: string | null = null;
+    if (!serverEnv.WORKERS_INTERNAL_SECRET) {
+      conversationError = "Workers not configured.";
+    } else {
+      const upstream = await fetch(`${serverEnv.WORKERS_URL}/tools/couples/start`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ link_id: link.id }),
+        cache: "no-store",
+      });
+      if (upstream.ok) {
+        const body = (await upstream.json()) as { conversation_id: string };
+        conversationId = body.conversation_id;
+      } else {
+        conversationError = `Couldn't open chat (${upstream.status}).`;
+      }
+    }
+
+    if (!conversationId) {
+      return (
+        <main className="mx-auto w-full max-w-2xl p-6">
+          <Link href="/couples" className="text-sm text-muted-foreground hover:underline">
+            ← Couples
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+            You + {partnerName}
+          </h1>
+          <p role="alert" className="mt-4 text-sm text-destructive">
+            {conversationError ?? "Couldn't open chat."}
+          </p>
+        </main>
+      );
+    }
+
+    const { data: messageRows } = await supabase
+      .from("messages")
+      .select("id, role, content, redacted_content, user_id, safety_verdict")
+      .eq("conversation_id", conversationId)
+      .in("role", ["user", "assistant"])
+      .order("id", { ascending: true })
+      .limit(100);
+    const initialMessages: ChatTurn[] = (messageRows ?? []).map((m) => ({
+      id: String(m.id),
+      role: m.role as "user" | "assistant",
+      content: m.redacted_content ?? m.content,
+      persistedMessageId: m.id,
+      ...(m.safety_verdict && m.safety_verdict !== "safe"
+        ? { safetyVerdict: m.safety_verdict }
+        : {}),
+    }));
+
+    void env; // touched to avoid unused-import in this branch
+
+    const partners = {
+      user_a: {
+        id: link.user_a,
+        name:
+          unwrap(link.partner_a)?.display_name
+          ?? unwrap(link.partner_a)?.username
+          ?? "Partner A",
+      },
+      user_b: {
+        id: link.user_b ?? "",
+        name:
+          unwrap(link.partner_b)?.display_name
+          ?? unwrap(link.partner_b)?.username
+          ?? "Partner B",
+      },
+    };
+
+    return (
+      <CouplesChat
+        conversationId={conversationId}
+        currentUserId={user.id}
+        partners={partners}
+        initialMessages={initialMessages}
+        initialTitle="Couples chat"
+      />
+    );
+  }
+
+  // Non-active states render the existing detail shell.
   return (
     <main className="mx-auto w-full max-w-2xl p-6">
       <Link href="/couples" className="text-sm text-muted-foreground hover:underline">
         ← Couples
       </Link>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-        {link.status === "active" ? `You + ${partnerName}` : `Invite to ${partnerName}`}
+        Invite to {partnerName}
       </h1>
       <p className="mt-1 text-xs text-muted-foreground">
         Created {new Date(link.created_at).toLocaleString()}.
@@ -75,20 +176,6 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
         </section>
       )}
 
-      {link.status === "active" && (
-        <section className="mt-6 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
-          <p className="font-medium">Link is active.</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Cross-fact consent: you {link.consent_a && link.consent_b
-              ? "and your partner"
-              : ""}{" "}
-            haven&apos;t toggled it on yet. Mediation works without it; turning
-            it on lets the AI reference what you&apos;ve each told it
-            separately. (Toggle ships next step.)
-          </p>
-        </section>
-      )}
-
       {(link.status === "revoked" || link.status === "expired") && (
         <section className="mt-6 rounded-md border border-input bg-muted/30 p-4 text-sm">
           {link.status === "revoked"
@@ -97,14 +184,14 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
         </section>
       )}
 
-      {link.status !== "revoked" && link.status !== "expired" && (
+      {link.status === "pending" && (
         <form action={revokeLink} className="mt-6">
           <input type="hidden" name="id" value={link.id} />
           <button
             type="submit"
             className="rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            End this link
+            Cancel invite
           </button>
         </form>
       )}

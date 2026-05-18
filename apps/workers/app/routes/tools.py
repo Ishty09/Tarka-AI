@@ -47,6 +47,12 @@ from app.services.roast_my_x import (
     is_known_target,
     run_roast_my_x,
 )
+from app.services.couples import (
+    CoupleLinkNotActiveError,
+    CoupleLinkNotFoundError,
+    NotALinkMemberError,
+    start_couple_session,
+)
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
 from app.services.supabase_client import get_supabase
@@ -922,4 +928,56 @@ async def moderate_content(
         action=result.action,
         reason=result.reason,
         categories=result.categories,
+    )
+
+
+# ----- Couples shared chat --------------------------------------------------
+
+
+class CoupleStartRequest(BaseModel):
+    link_id: str = Field(min_length=8, max_length=64)
+
+
+class CoupleStartResponse(BaseModel):
+    link_id: str
+    conversation_id: str
+    user_a: str
+    user_b: str
+
+
+@router.post(
+    "/couples/start",
+    dependencies=[Depends(_verify_internal_caller)],
+    response_model=CoupleStartResponse,
+)
+async def couples_start(
+    req: CoupleStartRequest,
+    user_id: Annotated[str, Depends(_require_user)],
+) -> CoupleStartResponse:
+    """Find or create the shared conversation for an active couple link
+    (§9.3.1). Idempotent — repeat calls return the same conversation_id.
+    """
+
+    supabase = await get_supabase()
+    try:
+        session = await start_couple_session(
+            supabase,
+            user_id=user_id,
+            link_id=req.link_id,
+        )
+    except CoupleLinkNotFoundError as err:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "couple_link_not_found") from err
+    except NotALinkMemberError as err:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_link_member") from err
+    except CoupleLinkNotActiveError as err:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"couple_link_not_active:{err}",
+        ) from err
+
+    return CoupleStartResponse(
+        link_id=session.link_id,
+        conversation_id=session.conversation_id,
+        user_a=session.user_a,
+        user_b=session.user_b,
     )

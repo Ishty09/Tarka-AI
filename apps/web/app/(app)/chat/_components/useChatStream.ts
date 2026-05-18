@@ -174,7 +174,33 @@ export function useChatStream(opts: UseChatStreamOptions) {
     setPending(false);
   }, []);
 
-  return { messages, send, stop, pending, error, quotaExceeded, safetyEvent };
+  /**
+   * Append a turn that came in from outside the hook — e.g. partner messages
+   * in a couples conversation pushed via Supabase Realtime. Idempotent on
+   * persistedMessageId so a re-fire doesn't duplicate.
+   */
+  const appendExternalTurn = useCallback((turn: ChatTurn) => {
+    setMessages((prev) => {
+      if (
+        turn.persistedMessageId !== undefined
+        && prev.some((m) => m.persistedMessageId === turn.persistedMessageId)
+      ) {
+        return prev;
+      }
+      return [...prev, turn];
+    });
+  }, []);
+
+  return {
+    messages,
+    send,
+    stop,
+    pending,
+    error,
+    quotaExceeded,
+    safetyEvent,
+    appendExternalTurn,
+  };
 }
 
 function parseSseBlock(block: string): { event: string; data: unknown } | null {

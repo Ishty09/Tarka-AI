@@ -21,6 +21,12 @@ interface Props {
   mode: "argue" | "roast" | "mediate" | "council" | "negotiate" | "custom";
   initialMessages: ChatTurn[];
   initialTitle?: string | null;
+  /**
+   * Wrapper callback — ChatThread calls this with its `appendExternalTurn`
+   * function once mounted so wrappers (CouplesChat) can push partner
+   * messages from Realtime events into the running thread.
+   */
+  registerExternalAppender?: (fn: (turn: ChatTurn) => void) => void;
 }
 
 export function ChatThread({
@@ -30,12 +36,21 @@ export function ChatThread({
   mode,
   initialMessages,
   initialTitle = null,
+  registerExternalAppender,
 }: Props) {
   const router = useRouter();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { messages, send, pending, error, quotaExceeded, safetyEvent } = useChatStream({
+  const {
+    messages,
+    send,
+    pending,
+    error,
+    quotaExceeded,
+    safetyEvent,
+    appendExternalTurn,
+  } = useChatStream({
     conversationId,
     personaSlug: conversationId ? null : personaSlug,
     mode,
@@ -48,6 +63,10 @@ export function ChatThread({
       }
     },
   });
+
+  useEffect(() => {
+    registerExternalAppender?.(appendExternalTurn);
+  }, [appendExternalTurn, registerExternalAppender]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
