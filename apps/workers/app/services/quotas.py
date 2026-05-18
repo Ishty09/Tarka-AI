@@ -40,6 +40,16 @@ MESSAGES_PER_DAY: dict[Tier, int] = {
 # more generous than 1/week, which we accept until §27 step 51 lands the
 # proper period-aware reset job. Note the variance in commit history when
 # we swap.
+# §8.1 roast feed posts. Spec is free=read-only, pro=5/week, max=30/week.
+# We approximate weekly via a daily counter: free=0, pro=1/day (~7/week),
+# max=5/day (~35/week). Period-aware reset is part of §27 step 51.
+ROAST_FEED_POSTS_PER_DAY: dict[Tier, int] = {
+    "free": 0,
+    "pro": 1,
+    "max": 5,
+}
+
+
 COUNCIL_RUNS_PER_DAY: dict[Tier, int] = {
     "free": 1,
     "pro": 3,
@@ -147,6 +157,19 @@ async def get_council_quota(supabase: AsyncClient, user_id: str) -> QuotaState:
 
 async def increment_council_count(supabase: AsyncClient, user_id: str) -> None:
     await _increment_counter(supabase, user_id, column="council_runs_used")
+
+
+async def get_roast_feed_quota(supabase: AsyncClient, user_id: str) -> QuotaState:
+    today = date.today()
+    reset_at = datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+    tier = await _read_tier(supabase, user_id)
+    limit = ROAST_FEED_POSTS_PER_DAY[tier]
+    used = await _read_counter(supabase, user_id, today, column="roast_feed_posts_used")
+    return QuotaState(tier=tier, used=used, limit=limit, reset_at=reset_at)
+
+
+async def increment_roast_feed_count(supabase: AsyncClient, user_id: str) -> None:
+    await _increment_counter(supabase, user_id, column="roast_feed_posts_used")
 
 
 async def _read_counter(

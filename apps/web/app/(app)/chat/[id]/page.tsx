@@ -47,6 +47,7 @@ export default async function ChatPage({ params }: PageProps) {
     id: String(m.id),
     role: m.role as "user" | "assistant",
     content: m.redacted_content ?? m.content,
+    persistedMessageId: m.id,
     ...(m.safety_verdict && m.safety_verdict !== "safe"
       ? { safetyVerdict: m.safety_verdict }
       : {}),

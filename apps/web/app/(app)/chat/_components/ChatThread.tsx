@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type ChatTurn, useChatStream } from "./useChatStream";
 import { ChatHeader } from "./ChatHeader";
+import { ShareToFeedDialog } from "./ShareToFeedDialog";
 
 // Client-side chat thread. Composer pinned to the bottom; messages reflow
 // upward as deltas stream in.
@@ -126,6 +127,13 @@ export function ChatThread({
 
 function MessageBubble({ turn }: { turn: ChatTurn }) {
   const isUser = turn.role === "user";
+  const [shareOpen, setShareOpen] = useState(false);
+  const canShare =
+    !isUser
+    && !turn.safetyVerdict
+    && typeof turn.persistedMessageId === "number"
+    && turn.content.length >= 30;
+
   return (
     <div className={`flex flex-col gap-2 ${isUser ? "items-end" : "items-start"}`}>
       {turn.contradiction && (
@@ -142,6 +150,22 @@ function MessageBubble({ turn }: { turn: ChatTurn }) {
       >
         {turn.content || (turn.role === "assistant" && <span className="text-muted-foreground">...</span>)}
       </div>
+      {canShare && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Share to feed
+          </button>
+          <ShareToFeedDialog
+            messageId={turn.persistedMessageId!}
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

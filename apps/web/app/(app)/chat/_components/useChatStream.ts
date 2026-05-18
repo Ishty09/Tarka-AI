@@ -27,6 +27,8 @@ export interface ChatTurn {
   safetyReason?: string;
   /** Contradiction surfaced inline §9.4.4 — pinned above the assistant bubble. */
   contradiction?: ContradictionCallout;
+  /** DB row id once the worker persisted this turn. Required for /feed sharing. */
+  persistedMessageId?: number;
 }
 
 export interface QuotaExceeded {
@@ -143,7 +145,15 @@ export function useChatStream(opts: UseChatStreamOptions) {
             setMessages((prev) => prev.filter((m) => m.id !== assistantTurn.id));
           } else if (parsed.event === "done") {
             const data = parsed.data as { assistant_message_id?: number };
-            opts.onAssistantPersisted?.({ assistantMessageId: data.assistant_message_id ?? null });
+            const persistedId = data.assistant_message_id ?? null;
+            if (persistedId !== null) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantTurn.id ? { ...m, persistedMessageId: persistedId } : m,
+                ),
+              );
+            }
+            opts.onAssistantPersisted?.({ assistantMessageId: persistedId });
           } else if (parsed.event === "error") {
             const reason = (parsed.data as { reason?: string }).reason ?? "unknown_error";
             setError(`Stream failed: ${reason}`);
