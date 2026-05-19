@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
 
+    # ----- Email (Resend; §3 + §14) ------------------------------------------
+    resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
+    resend_from_email: str = Field(
+        default="Quarrel <noreply@quarrel.ai>", alias="RESEND_FROM_EMAIL"
+    )
+    support_email: str = Field(default="support@quarrel.ai", alias="SUPPORT_EMAIL")
+    # §16 Privacy policy requires a postal address. Dev-default placeholder; set
+    # this in production before any non-transactional email goes out.
+    legal_address: str = Field(
+        default="Quarrel AI, Dhaka, Bangladesh",
+        alias="LEGAL_ADDRESS",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
