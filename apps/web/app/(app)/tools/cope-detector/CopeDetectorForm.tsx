@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CopyButton } from "../_components/CopyButton";
 
 interface CopeDetectorResponse {
   conversation_id: string;
@@ -22,7 +23,11 @@ interface QuotaExceeded {
 const MIN = 15;
 const MAX = 4000;
 
-export function CopeDetectorForm() {
+interface FormProps {
+  examples?: string[];
+}
+
+export function CopeDetectorForm({ examples = [] }: FormProps) {
   const [rationalization, setRationalization] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +98,26 @@ export function CopeDetectorForm() {
         </div>
       </form>
 
+      {!result && !pending && examples.length > 0 && rationalization.length === 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Try one of these
+          </p>
+          <div className="flex flex-col gap-2">
+            {examples.map((ex, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setRationalization(ex)}
+                className="rounded-md border border-input bg-background px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {quota && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           You hit your {quota.tier} daily message limit ({quota.used}/{quota.limit}).
@@ -114,23 +139,32 @@ function CopeDetectorResult({ result }: { result: CopeDetectorResponse }) {
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-md border border-input bg-muted/30 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          What You&apos;re Telling Yourself
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            What You&apos;re Telling Yourself
+          </h2>
+          <CopyButton text={result.telling_yourself} />
+        </div>
         <p className="mt-2 text-sm leading-relaxed">{result.telling_yourself}</p>
       </section>
 
       <section className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700/90">
-          What You&apos;re Actually Avoiding
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700/90">
+            What You&apos;re Actually Avoiding
+          </h2>
+          <CopyButton text={result.actually_avoiding} />
+        </div>
         <p className="mt-2 text-sm leading-relaxed">{result.actually_avoiding}</p>
       </section>
 
       <section className="rounded-md border border-primary/40 bg-primary/5 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-primary/90">
-          The Question You&apos;re Not Asking
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-primary/90">
+            The Question You&apos;re Not Asking
+          </h2>
+          <CopyButton text={result.unasked_question} />
+        </div>
         <p className="mt-2 text-base italic leading-relaxed">{result.unasked_question}</p>
       </section>
 

@@ -1,4 +1,11 @@
 import { CopeDetectorForm } from "./CopeDetectorForm";
+import { RecentRuns } from "../_components/RecentRuns";
+
+const EXAMPLES: string[] = [
+  "I'll start the new project after I finish the one I'm on — it's only fair to the team. They've been depending on me and switching now would be selfish.",
+  "I'm not ready to date again yet. I need to work on myself first. Once I really know who I am and what I want, then I'll be ready to bring that to someone.",
+  "I'll go to the gym when work calms down. Right now my schedule is just too unpredictable and any routine I start will get destroyed by the next deadline.",
+];
 
 export default function CopeDetectorPage() {
   return (
@@ -12,8 +19,9 @@ export default function CopeDetectorPage() {
         </p>
       </header>
       <div className="mt-6">
-        <CopeDetectorForm />
+        <CopeDetectorForm examples={EXAMPLES} />
       </div>
+      <RecentRuns mode="cope_detector" />
     </main>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CopyButton } from "../_components/CopyButton";
 
 interface WrongReason {
   reason: string;
@@ -27,7 +28,11 @@ interface QuotaExceeded {
 const MIN = 20;
 const MAX = 4000;
 
-export function DecisionKillerForm() {
+interface FormProps {
+  examples?: string[];
+}
+
+export function DecisionKillerForm({ examples = [] }: FormProps) {
   const [decision, setDecision] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +103,26 @@ export function DecisionKillerForm() {
         </div>
       </form>
 
+      {!result && !pending && examples.length > 0 && decision.length === 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Try one of these
+          </p>
+          <div className="flex flex-col gap-2">
+            {examples.map((ex, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setDecision(ex)}
+                className="rounded-md border border-input bg-background px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {quota && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           You hit your {quota.tier} daily message limit ({quota.used}/{quota.limit}).
@@ -116,12 +141,18 @@ export function DecisionKillerForm() {
 }
 
 function DecisionKillerResult({ result }: { result: DecisionKillerResponse }) {
+  const wrongText = result.reasons_wrong
+    .map((r, i) => `${i + 1}. ${r.reason} — ${r.argument}`)
+    .join("\n");
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-md border border-red-500/30 bg-red-500/5 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700/90">
-          3 Reasons This Is Wrong
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-red-700/90">
+            3 Reasons This Is Wrong
+          </h2>
+          <CopyButton text={wrongText} />
+        </div>
         <ol className="mt-3 flex flex-col gap-3">
           {result.reasons_wrong.map((r, i) => (
             <li key={i} className="text-sm">
@@ -133,16 +164,22 @@ function DecisionKillerResult({ result }: { result: DecisionKillerResponse }) {
       </section>
 
       <section className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700/90">
-          1 Reason It Might Be Right
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700/90">
+            1 Reason It Might Be Right
+          </h2>
+          <CopyButton text={result.one_reason_right} />
+        </div>
         <p className="mt-2 text-sm leading-relaxed">{result.one_reason_right}</p>
       </section>
 
       <section className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700/90">
-          What You&apos;re Actually Avoiding
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700/90">
+            What You&apos;re Actually Avoiding
+          </h2>
+          <CopyButton text={result.actual_avoidance} />
+        </div>
         <p className="mt-2 text-sm italic leading-relaxed">{result.actual_avoidance}</p>
       </section>
 

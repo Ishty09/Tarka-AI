@@ -1,4 +1,11 @@
 import { DecisionKillerForm } from "./DecisionKillerForm";
+import { RecentRuns } from "../_components/RecentRuns";
+
+const EXAMPLES: string[] = [
+  "I'm thinking about quitting my engineering job to do my side project full time. I've been saving for a year and have 14 months runway. The side project has ~200 paying users and $2k MRR.",
+  "I want to text my ex after 6 months of no contact. We didn't end on bad terms. I miss them but I'm also dating someone new who's been good to me.",
+  "I'm about to accept a job offer that's 30% more money but at a company whose mission I don't really care about. My current role is mission-aligned but stagnating.",
+];
 
 export default function DecisionKillerPage() {
   return (
@@ -12,8 +19,9 @@ export default function DecisionKillerPage() {
         </p>
       </header>
       <div className="mt-6">
-        <DecisionKillerForm />
+        <DecisionKillerForm examples={EXAMPLES} />
       </div>
+      <RecentRuns mode="decision_killer" />
     </main>
   );
 }
