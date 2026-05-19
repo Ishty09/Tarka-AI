@@ -1,0 +1,20 @@
+{
+  "app.name": "Quarrel",
+  "app.tagline": "الذكاء الاصطناعي الذي لن يدعك تكذب على نفسك.",
+  "push.daily_roast.title": "‏{persona_name} عندها رأي.",
+  "push.daily_roast.body": "{roast_preview}",
+  "push.contradiction.title": "ناقضت نفسك.",
+  "push.contradiction.body": "{summary}",
+  "push.couples_invite.title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية).",
+  "push.couples_invite.body": "اضغط لقبول رابط الأزواج في Quarrel.",
+  "push.wager_checkin.title": "هل فعلتها؟",
+  "push.wager_checkin.body": "{wager_goal} — سجّل الآن أو تخسر ‏${stake}.",
+  "push.wager_failed.title": "خسرت. ‏${stake} ذاهبة إلى {anti_charity}.",
+  "push.wager_failed.body": "افتح التطبيق لرؤية الإيصال.",
+  "push.mirror_ready.title": "تقرير المرآة جاهز.",
+  "push.mirror_ready.body": "إنه غير مُجامل.",
+  "push.eulogy_ready.title": "‏تأبين الربع {quarter} جاهز.",
+  "push.eulogy_ready.body": "افتحه عندما تكون مستعداً للصدق.",
+  "push.streak_punish.title": "اليوم {days_missed} من التقاعس.",
+  "push.streak_punish.body": "{drill_sergeant_message}"
+}

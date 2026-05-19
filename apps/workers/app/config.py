@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
 
+    # ----- Push (Web Push + Expo; §3 + §13) ---------------------------------
+    # VAPID keys for Web Push (RFC 8292). Both must be set for real delivery
+    # to browsers; until then `_DryRunWebPushSender` no-ops with a log line.
+    vapid_public_key: str = Field(default="", alias="VAPID_PUBLIC_KEY")
+    vapid_private_key: str = Field(default="", alias="VAPID_PRIVATE_KEY")
+    vapid_subject: str = Field(default="mailto:noreply@quarrel.ai", alias="VAPID_SUBJECT")
+    # Optional Expo access token — raises the per-hour rate limit.
+    expo_access_token: str = Field(default="", alias="EXPO_ACCESS_TOKEN")
+
     # ----- Email (Resend; §3 + §14) ------------------------------------------
     resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
     resend_from_email: str = Field(

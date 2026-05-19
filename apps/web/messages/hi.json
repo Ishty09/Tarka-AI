@@ -1,0 +1,20 @@
+{
+  "app.name": "Quarrel",
+  "app.tagline": "वो AI जो आपको खुद से झूठ नहीं बोलने देगा।",
+  "push.daily_roast.title": "{persona_name} के पास कुछ कहने को है।",
+  "push.daily_roast.body": "{roast_preview}",
+  "push.contradiction.title": "आपने खुद का विरोध किया।",
+  "push.contradiction.body": "{summary}",
+  "push.couples_invite.title": "{partner_name} आपसे (स्वस्थ तरीके से) बहस करना चाहते हैं।",
+  "push.couples_invite.body": "Quarrel कपल्स लिंक स्वीकार करने के लिए टैप करें।",
+  "push.wager_checkin.title": "क्या आपने वो काम किया?",
+  "push.wager_checkin.body": "{wager_goal} — अभी चेक-इन करें या ${stake} गँवा दें।",
+  "push.wager_failed.title": "आप हार गए। ${stake} {anti_charity} को जा रहा है।",
+  "push.wager_failed.body": "रसीद देखने के लिए ऐप खोलें।",
+  "push.mirror_ready.title": "आपकी Mirror Report तैयार है।",
+  "push.mirror_ready.body": "ये तारीफ़ नहीं है।",
+  "push.eulogy_ready.title": "आपका Q{quarter} शोक-संदेश तैयार है।",
+  "push.eulogy_ready.body": "ईमानदार होने के लिए तैयार हों तो खोलें।",
+  "push.streak_punish.title": "आलस का दिन {days_missed}।",
+  "push.streak_punish.body": "{drill_sergeant_message}"
+}
