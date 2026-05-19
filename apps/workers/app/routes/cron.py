@@ -17,11 +17,13 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
 from app.jobs.daily_roast import run_now as run_daily_roast_now
+from app.jobs.drill_sergeant_job import run_now as run_drill_sergeant_now
 from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
 from app.jobs.wager_evaluator import run_today as run_wager_eval_today
 from app.services.contradictions import run_batch
 from app.services.daily_roast import DEFAULT_WINDOW_MINUTES, run_window as run_daily_roast_window
+from app.services.drill_sergeant import run_today as run_drill_sergeant_today
 from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
 from app.services.wager_evaluator import run_due_evaluations
@@ -268,5 +270,45 @@ async def wager_evaluator(req: WagerEvalRequest) -> WagerEvalResponse:
         candidates=result.get("candidates", 0),
         succeeded=result.get("succeeded", 0),
         failed=result.get("failed", 0),
+        skipped=result.get("skipped", 0),
+    )
+
+
+class DrillSergeantRequest(BaseModel):
+    """Optional override of `today` for backfill or test fires."""
+
+    today: str | None = None
+
+
+class DrillSergeantResponse(BaseModel):
+    today: str
+    candidates: int
+    delivered: int
+    skipped: int
+
+
+@router.post(
+    "/drill-sergeant",
+    response_model=DrillSergeantResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def drill_sergeant(req: DrillSergeantRequest) -> DrillSergeantResponse:
+    from datetime import date as _date
+
+    if req.today is None:
+        result = await run_drill_sergeant_now()
+        today_iso = datetime.now(UTC).date().isoformat()
+    else:
+        try:
+            today_d = _date.fromisoformat(req.today)
+        except ValueError as err:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid_today") from err
+        result = await run_drill_sergeant_today(today=today_d)
+        today_iso = today_d.isoformat()
+
+    return DrillSergeantResponse(
+        today=today_iso,
+        candidates=result.get("candidates", 0),
+        delivered=result.get("delivered", 0),
         skipped=result.get("skipped", 0),
     )
