@@ -32,4 +32,10 @@ export const env = parsed.data;
 export const serverEnv = {
   WORKERS_URL: process.env.WORKERS_URL ?? "http://localhost:8000",
   WORKERS_INTERNAL_SECRET: process.env.WORKERS_INTERNAL_SECRET ?? "",
+  POLAR_ACCESS_TOKEN: process.env.POLAR_ACCESS_TOKEN ?? "",
+  POLAR_API_URL: process.env.POLAR_API_URL ?? "https://api.polar.sh",
+  POLAR_PRODUCT_ID_PRO_MONTHLY: process.env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? "",
+  POLAR_PRODUCT_ID_PRO_ANNUAL: process.env.POLAR_PRODUCT_ID_PRO_ANNUAL ?? "",
+  POLAR_PRODUCT_ID_MAX_MONTHLY: process.env.POLAR_PRODUCT_ID_MAX_MONTHLY ?? "",
+  POLAR_PRODUCT_ID_MAX_ANNUAL: process.env.POLAR_PRODUCT_ID_MAX_ANNUAL ?? "",
 } as const;

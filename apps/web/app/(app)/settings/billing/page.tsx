@@ -15,7 +15,13 @@ function fmtDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default async function BillingPage() {
+interface PageProps {
+  searchParams?: Promise<{ polar_status?: string }>;
+}
+
+export default async function BillingPage({ searchParams }: PageProps = {}) {
+  const params = (await searchParams) ?? {};
+  const returnedFromCheckout = params.polar_status === "success";
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -41,6 +47,12 @@ export default async function BillingPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {returnedFromCheckout && (
+        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm">
+          Thanks — your checkout completed at Polar. Your tier will update as
+          soon as the subscription webhook lands (usually a few seconds).
+        </div>
+      )}
       <SettingsSection
         title="Current plan"
         description="All features live on every tier; only limits differ."
