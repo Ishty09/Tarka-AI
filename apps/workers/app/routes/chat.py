@@ -39,7 +39,18 @@ from supabase import AsyncClient
 from app.config import get_settings
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
 from app.services import fact_extraction
-from app.services._db_typing import row_or_none, rows as _rows
+from app.services._db_typing import row_or_none
+from app.services._db_typing import rows as _rows
+from app.services.enforcement import (
+    SuspendedUserError,
+    assert_not_suspended,
+    check_quota,
+    quota_detail,
+)
+from app.services.groups import (
+    AI_TURN_TAKING_THRESHOLD,
+    count_recent_consecutive_humans,
+)
 from app.services.idempotency import check_idempotency, record_idempotency
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -56,11 +67,7 @@ from app.services.memory import (
     load_user_facts,
     mark_contradiction_surfaced,
 )
-from app.services.groups import (
-    AI_TURN_TAKING_THRESHOLD,
-    count_recent_consecutive_humans,
-)
-from app.services.quotas import get_message_quota, increment_message_count
+from app.services.quotas import increment_message_count
 from app.services.safety import classify_message, redact
 from app.services.supabase_client import get_supabase
 
@@ -160,8 +167,17 @@ async def chat_stream(
         group_room_id=req.group_room_id,
     )
 
-    # ----- Quota check --------------------------------------------------------
-    quota = await get_message_quota(supabase, user_id)
+    # ----- Suspension + quota -------------------------------------------------
+    # §50: SSE responses can't bubble a regular HTTPException without
+    # surfacing as an opaque 500, so we trap SuspendedUserError here and
+    # ship a `suspended` SSE event instead of using the Depends-based
+    # enforce_user helper that the JSON tools use.
+    try:
+        await assert_not_suspended(supabase, user_id=user_id)
+    except SuspendedUserError as err:
+        return _suspended_response(err)
+
+    quota = await check_quota(supabase, user_id=user_id, scope="messages")
     if quota.exceeded:
         return _quota_exceeded_response(quota)
 
@@ -740,14 +756,7 @@ def _replay_stream(body: dict[str, Any]) -> StreamingResponse:
 
 
 def _quota_exceeded_response(quota: Any) -> StreamingResponse:
-    payload = {
-        "error": "quota_exceeded",
-        "tier": quota.tier,
-        "limit": quota.limit,
-        "used": quota.used,
-        "reset_at": quota.reset_at.isoformat(),
-        "upgrade_url": "/pricing",
-    }
+    payload = quota_detail(quota, scope="messages")
 
     async def generator() -> AsyncIterator[bytes]:
         yield _sse_event("quota_exceeded", payload)
@@ -756,4 +765,17 @@ def _quota_exceeded_response(quota: Any) -> StreamingResponse:
         generator(),
         media_type="text/event-stream",
         status_code=429,
+    )
+
+
+def _suspended_response(err: SuspendedUserError) -> StreamingResponse:
+    payload = err.detail if isinstance(err.detail, dict) else {"error": "user_suspended"}
+
+    async def generator() -> AsyncIterator[bytes]:
+        yield _sse_event("suspended", payload)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        status_code=403,
     )

@@ -16,22 +16,37 @@ from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.prompts.council import DILEMMA_MAX_CHARS
-from app.services.council import CouncilWipeoutError, run_council
-from app.services.quotas import (
-    get_council_quota,
-    get_message_quota,
-    increment_council_count,
-    increment_message_count,
-)
 from app.services.breakup_analyzer import (
     DURATION_MAX_CHARS,
-    QUOTA_COST as BREAKUP_QUOTA_COST,
     THREAD_MAX_CHARS,
     run_breakup_analyzer,
 )
+from app.services.breakup_analyzer import (
+    QUOTA_COST as BREAKUP_QUOTA_COST,
+)
 from app.services.cope_detector import RATIONALIZATION_MAX_CHARS, run_cope_detector
+from app.services.council import CouncilWipeoutError, run_council
+from app.services.couples import (
+    CoupleLinkNotActiveError,
+    CoupleLinkNotFoundError,
+    NotALinkMemberError,
+    start_couple_session,
+)
 from app.services.decision_killer import DECISION_MAX_CHARS, run_decision_killer
+from app.services.enforcement import (
+    assert_not_suspended,
+    check_quota,
+    enforce_user,
+    quota_detail,
+)
 from app.services.future_self import FUTURE_DECISION_MAX_CHARS, run_future_self
+from app.services.groups import (
+    GroupArchivedError,
+    GroupNotFoundError,
+    NotAGroupMemberError,
+    start_group_session,
+)
+from app.services.moderation import ModerationKind, moderate
 from app.services.negotiation import (
     NotANegotiationError,
     UnknownScenarioError,
@@ -39,25 +54,15 @@ from app.services.negotiation import (
     run_critique,
     start_session,
 )
-from app.services.moderation import ModerationKind, moderate
 from app.services.past_self import PAST_CONTENT_MAX_CHARS, run_past_self
+from app.services.quotas import increment_council_count, increment_message_count
 from app.services.roast_my_x import (
     CONTENT_MAX_CHARS as ROAST_CONTENT_MAX_CHARS,
+)
+from app.services.roast_my_x import (
     UnknownTargetError,
     is_known_target,
     run_roast_my_x,
-)
-from app.services.couples import (
-    CoupleLinkNotActiveError,
-    CoupleLinkNotFoundError,
-    NotALinkMemberError,
-    start_couple_session,
-)
-from app.services.groups import (
-    GroupArchivedError,
-    GroupNotFoundError,
-    NotAGroupMemberError,
-    start_group_session,
 )
 from app.services.safety import classify_message
 from app.services.steelman import POSITION_MAX_CHARS, run_steelman
@@ -137,21 +142,8 @@ async def council(
     user_id: Annotated[str, Depends(_require_user)],
 ) -> Any:
     supabase = await get_supabase()
-
-    # Quota first — cheaper than the safety screen if the user has nothing left.
-    quota = await get_council_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    # Suspension + per-scope quota in one call (§50). Raises 403 / 429.
+    await enforce_user(supabase, user_id=user_id, scope="council")
 
     safety = await classify_message(
         req.dilemma,
@@ -229,19 +221,7 @@ async def steelman(
     supabase = await get_supabase()
 
     # §9.1.3: counts as 1 message → use the chat-message quota.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.position,
@@ -309,19 +289,7 @@ async def decision_killer(
     supabase = await get_supabase()
 
     # §9.5.1: counts as 1 message → chat-message quota.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.decision,
@@ -383,19 +351,7 @@ async def cope_detector(
     supabase = await get_supabase()
 
     # §9.5.2: counts as 1 message → chat-message quota.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.rationalization,
@@ -456,19 +412,7 @@ async def past_self(
     supabase = await get_supabase()
 
     # §9.1.5: counts as 1 message per turn.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.past_content,
@@ -527,19 +471,7 @@ async def future_self(
     supabase = await get_supabase()
 
     # §9.1.6: standard quota → chat-message bucket.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.decision,
@@ -668,19 +600,7 @@ async def negotiation_critique(
 ) -> Any:
     supabase = await get_supabase()
 
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     try:
         result = await run_critique(
@@ -752,19 +672,12 @@ async def breakup_analyzer(
 
     # §9.3.3: counts as 3 messages. Bail BEFORE the LLM call if the user
     # can't afford the full charge.
-    quota = await get_message_quota(supabase, user_id)
+    await assert_not_suspended(supabase, user_id=user_id)
+    quota = await check_quota(supabase, user_id=user_id, scope="messages")
     if quota.remaining < BREAKUP_QUOTA_COST:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-                "cost": BREAKUP_QUOTA_COST,
-            },
+            detail={**quota_detail(quota), "cost": BREAKUP_QUOTA_COST},
         )
 
     safety = await classify_message(
@@ -845,19 +758,7 @@ async def roast_my_x(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown_roast_target")
 
     # §9.2.2: counts as 1 message.
-    quota = await get_message_quota(supabase, user_id)
-    if quota.exceeded:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": "quota_exceeded",
-                "tier": quota.tier,
-                "limit": quota.limit,
-                "used": quota.used,
-                "reset_at": quota.reset_at.isoformat(),
-                "upgrade_url": "/pricing",
-            },
-        )
+    await enforce_user(supabase, user_id=user_id, scope="messages")
 
     safety = await classify_message(
         req.content,
