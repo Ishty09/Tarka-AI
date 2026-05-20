@@ -134,3 +134,79 @@ export async function createCheckout(
   }
   return { ok: true, url: json.url };
 }
+
+// ----- Subscription mutations ---------------------------------------------
+
+export type SubscriptionMutationResult =
+  | { ok: true }
+  | { ok: false; status: number; error: string };
+
+async function patchSubscription(
+  externalSubscriptionId: string,
+  body: Record<string, unknown>,
+): Promise<SubscriptionMutationResult> {
+  if (!polarEnabled()) {
+    return { ok: false, status: 503, error: "polar_disabled" };
+  }
+  if (!serverEnv.POLAR_ACCESS_TOKEN) {
+    return { ok: false, status: 503, error: "polar_access_token_unset" };
+  }
+
+  let resp: Response;
+  try {
+    resp = await fetch(
+      `${serverEnv.POLAR_API_URL}/v1/subscriptions/${encodeURIComponent(externalSubscriptionId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${serverEnv.POLAR_ACCESS_TOKEN}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { ok: false, status: 502, error: "polar_network" };
+  }
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    return { ok: false, status: resp.status, error: text || resp.statusText };
+  }
+  return { ok: true };
+}
+
+/**
+ * Schedule cancellation at the current period end. Polar continues to
+ * provide access until the period ends, then fires `subscription.revoked`
+ * which our webhook (step 48) turns into a free-tier downgrade.
+ */
+export async function cancelSubscriptionAtPeriodEnd(externalSubscriptionId: string) {
+  return patchSubscription(externalSubscriptionId, { cancel_at_period_end: true });
+}
+
+/** Reverse a queued cancellation while the period is still active. */
+export async function uncancelSubscription(externalSubscriptionId: string) {
+  return patchSubscription(externalSubscriptionId, { cancel_at_period_end: false });
+}
+
+/**
+ * Move an existing subscription to a different product (tier change). Polar
+ * prorates between the current and new product within the same billing cycle.
+ */
+export async function changeSubscriptionProduct(
+  externalSubscriptionId: string,
+  tier: TierKey,
+  interval: IntervalKey,
+) {
+  const productId = resolveProductId(tier, interval);
+  if (!productId) {
+    return {
+      ok: false as const,
+      status: 503,
+      error: `polar_product_unset_${tier}_${interval}`,
+    };
+  }
+  return patchSubscription(externalSubscriptionId, { product_id: productId });
+}

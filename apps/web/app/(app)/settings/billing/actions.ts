@@ -1,10 +1,14 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
+  cancelSubscriptionAtPeriodEnd,
+  changeSubscriptionProduct,
   createCheckout,
+  uncancelSubscription,
   type IntervalKey,
   type TierKey,
 } from "@/lib/polar";
@@ -45,18 +49,89 @@ export async function startCheckout(
   });
 
   if (!result.ok) {
-    // Surface dev-friendly text for the known "off" states; let unknown
-    // upstream errors flow through verbatim.
-    const friendly =
-      result.error === "polar_disabled"
-        ? "Payments aren't live yet."
-        : result.error === "polar_access_token_unset"
-          ? "Polar access token isn't configured."
-          : result.error.startsWith("polar_product_unset")
-            ? "That product isn't configured yet."
-            : null;
-    return { ok: false, error: friendly ?? `Checkout failed (${result.status}).` };
+    return { ok: false, error: friendlyPolarError(result.error, result.status) };
   }
 
   redirect(result.url);
+}
+
+// ----- Cancel + resume + cross-tier swap ----------------------------------
+
+
+/** Look up the user's active Polar subscription id under their session. */
+async function findActivePolarSubscriptionId(): Promise<string | null> {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data } = await supabase
+    .from("subscriptions")
+    .select("external_subscription_id, source, status")
+    .eq("user_id", user.id)
+    .eq("source", "polar")
+    .in("status", ["active", "trialing", "past_due"])
+    .order("current_period_end", { ascending: false })
+    .limit(1);
+
+  const row = (data ?? [])[0];
+  return row?.external_subscription_id ?? null;
+}
+
+
+export async function cancelSubscriptionAction(): Promise<ActionResult> {
+  const externalId = await findActivePolarSubscriptionId();
+  if (!externalId) return { ok: false, error: "No active subscription to cancel." };
+  const res = await cancelSubscriptionAtPeriodEnd(externalId);
+  if (!res.ok) return { ok: false, error: friendlyPolarError(res.error, res.status) };
+  revalidatePath("/settings/billing");
+  return { ok: true };
+}
+
+
+export async function resumeSubscriptionAction(): Promise<ActionResult> {
+  const externalId = await findActivePolarSubscriptionId();
+  if (!externalId) return { ok: false, error: "No subscription to resume." };
+  const res = await uncancelSubscription(externalId);
+  if (!res.ok) return { ok: false, error: friendlyPolarError(res.error, res.status) };
+  revalidatePath("/settings/billing");
+  return { ok: true };
+}
+
+
+const switchSchema = z.object({
+  tier: z.enum(["pro", "max"]),
+  interval: z.enum(["monthly", "annual"]),
+});
+
+
+export async function switchTierAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = switchSchema.safeParse({
+    tier: (formData.get("tier") ?? "").toString() as TierKey,
+    interval: (formData.get("interval") ?? "").toString() as IntervalKey,
+  });
+  if (!parsed.success) return { ok: false, error: "Pick a tier and an interval." };
+
+  const externalId = await findActivePolarSubscriptionId();
+  if (!externalId) return { ok: false, error: "No active subscription to switch." };
+
+  const res = await changeSubscriptionProduct(
+    externalId,
+    parsed.data.tier,
+    parsed.data.interval,
+  );
+  if (!res.ok) return { ok: false, error: friendlyPolarError(res.error, res.status) };
+  revalidatePath("/settings/billing");
+  return { ok: true };
+}
+
+
+function friendlyPolarError(error: string, status: number): string {
+  if (error === "polar_disabled") return "Payments aren't live yet.";
+  if (error === "polar_access_token_unset") return "Polar access token isn't configured.";
+  if (error.startsWith("polar_product_unset")) return "That product isn't configured yet.";
+  if (error === "polar_network") return "Couldn't reach Polar. Try again in a minute.";
+  return `Request failed (${status}).`;
 }

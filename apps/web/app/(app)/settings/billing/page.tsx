@@ -4,6 +4,7 @@ import { TIER_LIMITS, type Tier } from "@quarrel/shared/constants";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { polarEnabled } from "@/lib/wagers";
 import { SettingsSection } from "../_components/SettingsSection";
+import { SubscriptionControls } from "./SubscriptionControls";
 
 // §12.4 — Billing. Surfaces current tier, the active Polar/RC subscription,
 // and the per-tier limits the user is hitting. The "Manage" CTA hands off to
@@ -152,6 +153,16 @@ export default async function BillingPage({ searchParams }: PageProps = {}) {
               <span>{active.cancel_at_period_end ? "No — cancels at period end" : "Yes"}</span>
             </li>
           </ul>
+        )}
+
+        {active && active.source === "polar" && polarEnabled() && (
+          <div className="mt-4 border-t border-input pt-4">
+            <SubscriptionControls
+              tier={tier}
+              cancelAtPeriodEnd={active.cancel_at_period_end}
+              currentPeriodEnd={active.current_period_end}
+            />
+          </div>
         )}
       </SettingsSection>
 
