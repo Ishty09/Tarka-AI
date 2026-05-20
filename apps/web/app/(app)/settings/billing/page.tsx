@@ -27,7 +27,8 @@ export default async function BillingPage({ searchParams }: PageProps = {}) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: subs }] = await Promise.all([
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [{ data: profile }, { data: subs }, { data: usage }] = await Promise.all([
     supabase.from("profiles").select("tier, tier_source").eq("id", user.id).maybeSingle(),
     supabase
       .from("subscriptions")
@@ -37,8 +38,23 @@ export default async function BillingPage({ searchParams }: PageProps = {}) {
       .eq("user_id", user.id)
       .order("current_period_end", { ascending: false })
       .limit(5),
+    supabase
+      .from("usage_quotas")
+      .select(
+        "messages_used, council_runs_used, roast_feed_posts_used, active_wagers, active_personas",
+      )
+      .eq("user_id", user.id)
+      .eq("period_start", todayIso)
+      .maybeSingle(),
   ]);
   if (!profile) redirect("/onboarding");
+
+  // Worker's daily counter resets at the next 00:00 UTC — match §8.3 step 6.
+  const nextResetUtc = (() => {
+    const d = new Date();
+    d.setUTCHours(24, 0, 0, 0);
+    return d;
+  })();
 
   const tier: Tier = (profile.tier as Tier) ?? "free";
   const limits = TIER_LIMITS[tier];
@@ -85,6 +101,33 @@ export default async function BillingPage({ searchParams }: PageProps = {}) {
               </a>
             )}
           </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Today's usage"
+        description={`Resets at ${nextResetUtc.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short", timeZoneName: "short" })}. Counters increment as you chat.`}
+      >
+        <div className="flex flex-col gap-3">
+          <UsageBar
+            label="Messages"
+            used={usage?.messages_used ?? 0}
+            limit={limits.messages_per_day}
+          />
+          <UsageBar
+            label="Council runs"
+            used={usage?.council_runs_used ?? 0}
+            limit={limits.council_runs.limit}
+            limitSuffix={`/${limits.council_runs.period}`}
+          />
+          {limits.roast_feed_posts_per_week > 0 && (
+            <UsageBar
+              label="Roast Feed posts"
+              used={usage?.roast_feed_posts_used ?? 0}
+              limit={limits.roast_feed_posts_per_week}
+              limitSuffix=" / week"
+            />
+          )}
         </div>
       </SettingsSection>
 
@@ -182,5 +225,43 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
     </li>
+  );
+}
+
+function UsageBar({
+  label,
+  used,
+  limit,
+  limitSuffix = "",
+}: {
+  label: string;
+  used: number;
+  limit: number;
+  limitSuffix?: string;
+}) {
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  // Tint shifts as the user approaches the wall.
+  const tone =
+    pct >= 100
+      ? "bg-destructive"
+      : pct >= 80
+        ? "bg-amber-500"
+        : "bg-primary";
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground">
+          {used.toLocaleString()} / {limit.toLocaleString()}
+          {limitSuffix}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full ${tone} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   );
 }
