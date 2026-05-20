@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     # Optional Expo access token — raises the per-hour rate limit.
     expo_access_token: str = Field(default="", alias="EXPO_ACCESS_TOKEN")
 
+    # ----- Polar (web subscriptions; §3 + §8) -------------------------------
+    polar_webhook_secret: str = Field(default="", alias="POLAR_WEBHOOK_SECRET")
+    polar_product_id_pro_monthly: str = Field(default="", alias="POLAR_PRODUCT_ID_PRO_MONTHLY")
+    polar_product_id_pro_annual: str = Field(default="", alias="POLAR_PRODUCT_ID_PRO_ANNUAL")
+    polar_product_id_max_monthly: str = Field(default="", alias="POLAR_PRODUCT_ID_MAX_MONTHLY")
+    polar_product_id_max_annual: str = Field(default="", alias="POLAR_PRODUCT_ID_MAX_ANNUAL")
+
     # ----- Email (Resend; §3 + §14) ------------------------------------------
     resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
     resend_from_email: str = Field(
