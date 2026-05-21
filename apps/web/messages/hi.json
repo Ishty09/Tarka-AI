@@ -1,6 +1,10 @@
 {
   "app.name": "Quarrel",
   "app.tagline": "वो AI जो आपको खुद से झूठ नहीं बोलने देगा।",
+  "ai_disclosure.title": "आप एक AI से बात कर रहे हैं।",
+  "ai_disclosure.body": "Quarrel एक AI सिस्टम है। आपको जो जवाब मिल रहे हैं वे एक भाषा मॉडल ने बनाए हैं, किसी इंसान ने नहीं। ये जवाब ग़लत, पक्षपाती या आपस में विरोधाभासी हो सकते हैं। ये चिकित्सीय, क़ानूनी, वित्तीय या मानसिक स्वास्थ्य सलाह नहीं हैं। संकट में हों तो अपनी स्थानीय इमरजेंसी सेवा या Safety पेज पर दी गई हेल्पलाइन से संपर्क करें।",
+  "ai_disclosure.detail_link": "पूरी AI डिस्क्लोज़र पढ़ें",
+  "ai_disclosure.acknowledge": "समझ गया",
   "push.daily_roast.title": "{persona_name} के पास कुछ कहने को है।",
   "push.daily_roast.body": "{roast_preview}",
   "push.contradiction.title": "आपने खुद का विरोध किया।",

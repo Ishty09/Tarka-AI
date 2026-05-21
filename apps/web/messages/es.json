@@ -1,6 +1,10 @@
 {
   "app.name": "Quarrel",
   "app.tagline": "La IA que no te dejará mentirte a ti mismo.",
+  "ai_disclosure.title": "Estás hablando con una IA.",
+  "ai_disclosure.body": "Quarrel es un sistema de IA. Las respuestas que recibes las genera un modelo de lenguaje, no una persona. Pueden ser incorrectas, sesgadas o contradictorias. No son consejo médico, legal, financiero ni de salud mental. Si estás en crisis, contacta los servicios de emergencia locales o una de las líneas de ayuda en la sección Safety.",
+  "ai_disclosure.detail_link": "Lee la divulgación de IA completa",
+  "ai_disclosure.acknowledge": "Entendido",
   "push.daily_roast.title": "{persona_name} tiene algo que decir.",
   "push.daily_roast.body": "{roast_preview}",
   "push.contradiction.title": "Te contradijiste.",

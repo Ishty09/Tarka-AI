@@ -1,12 +1,19 @@
+import { getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { hasAcknowledgedAiDisclosure } from "@/lib/eu-ai-act";
+import { EuAiActModal } from "./_components/EuAiActModal";
 
 // Shared chrome for every (app)/* page. Auth is enforced upstream by
 // middleware.ts; this layout adds a small nav strip so signed-in users see
 // who they are and can sign out. Onboarding-incomplete users are bounced
 // here — their profile row exists but onboarding_completed_at is null, so
 // any (app) hit redirects to /onboarding to finish setup.
+//
+// EU AI Act Article 50 first-run modal mounts here so the disclosure shows
+// on every authenticated entry point — chat, tools, personas, etc. — until
+// the visitor acknowledges it for this device (§27 step 55).
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabase();
@@ -20,6 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .maybeSingle();
 
   if (!profile?.onboarding_completed_at) redirect("/onboarding");
+
+  const [acknowledged, locale] = await Promise.all([
+    hasAcknowledgedAiDisclosure(),
+    getLocale(),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -50,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <div className="flex-1">{children}</div>
+      <EuAiActModal show={!acknowledged} locale={locale} />
     </div>
   );
 }
