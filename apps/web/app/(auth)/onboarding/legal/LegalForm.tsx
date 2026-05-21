@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { submitLegal, type ActionResult } from "../actions";
 
@@ -13,14 +14,14 @@ export function LegalForm({ personaCarry }: { personaCarry: string }) {
       <label className="flex items-start gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm">
         <input type="checkbox" name="privacy" value="on" required className="mt-0.5 size-4" />
         <span>
-          I have read the <a href="/legal/privacy/en" className="underline">Privacy Policy</a>.
+          I have read the <Link href="/legal/privacy/en" className="underline">Privacy Policy</Link>.
         </span>
       </label>
 
       <label className="flex items-start gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm">
         <input type="checkbox" name="terms" value="on" required className="mt-0.5 size-4" />
         <span>
-          I accept the <a href="/legal/terms/en" className="underline">Terms of Service</a>.
+          I accept the <Link href="/legal/terms/en" className="underline">Terms of Service</Link>.
         </span>
       </label>
 

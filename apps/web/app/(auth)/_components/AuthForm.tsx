@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { signInWithMagicLink, type AuthActionResult } from "../actions";
 
@@ -83,8 +84,9 @@ export function AuthForm({ mode, next, errorMessage }: Props) {
       </form>
 
       <p className="text-center text-xs text-muted-foreground">
-        By continuing you agree to the <a href="/legal/terms/en" className="underline">Terms</a> and{" "}
-        <a href="/legal/privacy/en" className="underline">Privacy Policy</a>.
+        By continuing you agree to the{" "}
+        <Link href="/legal/terms/en" className="underline">Terms</Link> and{" "}
+        <Link href="/legal/privacy/en" className="underline">Privacy Policy</Link>.
       </p>
     </div>
   );
