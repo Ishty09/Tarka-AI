@@ -177,14 +177,25 @@ export async function requestDataExport(): Promise<ActionResult> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Persist the export request as an audit_log-equivalent in a row the user
-  // can re-read. apps/workers will pick this up via a cron job (§61 backup
-  // automation), generate the JSON, and email a signed link via Resend.
-  // For now we only record intent — the worker pickup is a separate step.
+  // Throttle: only one in-flight (pending/processing) request per user.
+  // The worker drains the queue; until it picks up the existing row we
+  // don't need to queue another. The owner-insert RLS policy makes the
+  // insert itself safe, but the throttle saves operator pages from
+  // accidental double-clicks.
+  const { data: existing } = await supabase
+    .from("data_export_requests")
+    .select("id, status")
+    .eq("user_id", user.id)
+    .in("status", ["pending", "processing"])
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    return { ok: false, error: "An export is already queued. Watch your inbox." };
+  }
+
   const { error } = await supabase
-    .from("profiles")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", user.id);
+    .from("data_export_requests")
+    .insert({ user_id: user.id });
   if (error) return { ok: false, error: "Couldn't queue export." };
 
   revalidatePath("/settings/data");

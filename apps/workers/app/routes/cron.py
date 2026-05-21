@@ -17,12 +17,15 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
 from app.jobs.daily_roast import run_now as run_daily_roast_now
+from app.jobs.data_export import DEFAULT_BATCH_LIMIT
+from app.jobs.data_export import run_now as run_data_export_now
 from app.jobs.drill_sergeant_job import run_now as run_drill_sergeant_now
 from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
 from app.jobs.wager_evaluator import run_today as run_wager_eval_today
 from app.services.contradictions import run_batch
-from app.services.daily_roast import DEFAULT_WINDOW_MINUTES, run_window as run_daily_roast_window
+from app.services.daily_roast import DEFAULT_WINDOW_MINUTES
+from app.services.daily_roast import run_window as run_daily_roast_window
 from app.services.drill_sergeant import run_today as run_drill_sergeant_today
 from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
@@ -311,4 +314,38 @@ async def drill_sergeant(req: DrillSergeantRequest) -> DrillSergeantResponse:
         candidates=result.get("candidates", 0),
         delivered=result.get("delivered", 0),
         skipped=result.get("skipped", 0),
+    )
+
+
+class DataExportRequest(BaseModel):
+    """Optional override of the per-tick batch size.
+
+    Default (none): DEFAULT_BATCH_LIMIT pending requests per call. A
+    scheduler firing every minute will drain the queue at limit/min.
+    """
+
+    limit: int | None = None
+
+
+class DataExportResponse(BaseModel):
+    limit: int
+    processed: int
+    failed: int
+
+
+@router.post(
+    "/data-export",
+    response_model=DataExportResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def data_export(req: DataExportRequest) -> DataExportResponse:
+    limit = req.limit if req.limit and req.limit > 0 else DEFAULT_BATCH_LIMIT
+    if req.limit is None:
+        result = await run_data_export_now()
+    else:
+        result = await run_data_export_now(limit=limit)
+    return DataExportResponse(
+        limit=limit,
+        processed=result.get("processed", 0),
+        failed=result.get("failed", 0),
     )
