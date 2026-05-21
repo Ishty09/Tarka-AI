@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.observability import init_sentry
 from app.routes import admin, chat, cron, safety, tools, webhooks
+
+# Sentry must initialise before FastAPI creates middleware so the
+# integration can hook the request lifecycle (§27 step 60).
+init_sentry()
 
 app = FastAPI(
     title="Quarrel Workers",

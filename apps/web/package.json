@@ -14,6 +14,7 @@
     "@quarrel/ai": "workspace:*",
     "@quarrel/personas": "workspace:*",
     "@quarrel/shared": "workspace:*",
+    "@sentry/nextjs": "^10.53.1",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.105.4",
     "class-variance-authority": "^0.7.1",
