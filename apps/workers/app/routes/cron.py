@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.jobs.account_deletion import run_now as run_account_deletion_now
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
 from app.jobs.daily_roast import run_now as run_daily_roast_now
 from app.jobs.data_export import DEFAULT_BATCH_LIMIT
@@ -348,4 +349,28 @@ async def data_export(req: DataExportRequest) -> DataExportResponse:
         limit=limit,
         processed=result.get("processed", 0),
         failed=result.get("failed", 0),
+    )
+
+
+class AccountDeletionResponse(BaseModel):
+    notified: int
+    notify_failed: int
+    candidates: int
+    deleted: int
+    delete_failed: int
+
+
+@router.post(
+    "/account-deletion",
+    response_model=AccountDeletionResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def account_deletion() -> AccountDeletionResponse:
+    result = await run_account_deletion_now()
+    return AccountDeletionResponse(
+        notified=result.get("notified", 0),
+        notify_failed=result.get("notify_failed", 0),
+        candidates=result.get("candidates", 0),
+        deleted=result.get("deleted", 0),
+        delete_failed=result.get("delete_failed", 0),
     )
