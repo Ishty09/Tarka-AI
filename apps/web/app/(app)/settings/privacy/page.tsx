@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { SettingsSection } from "../_components/SettingsSection";
+import { AuditLog, type AuditRow } from "./AuditLog";
 import { CrossFactToggle } from "./CrossFactToggle";
 
 // §12.3 — Privacy. Lists every active couple link with its cross-fact toggle
-// per-side, plus a brief Roast Feed visibility note. The audit_log table is
-// admin-only (§6.7 audit_log_admin); we surface the user-readable equivalent
-// instead — couple_link history with timestamps.
+// per-side, the Roast Feed visibility note, couple-link history, and the
+// user-facing audit-log viewer (last 30 days) surfaced via the
+// audit_log_self_select RLS policy from step 59.
 
 type CoupleLinkRow = {
   id: string;
@@ -50,6 +51,16 @@ export default async function PrivacyPage() {
       partnersById.set(p.id, p.display_name ?? `@${p.username}`);
     }
   }
+
+  // §12.3 — last 30 days of audit entries the user is allowed to see.
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data: auditRaw } = await supabase
+    .from("audit_log")
+    .select("id, action, entity_type, entity_id, metadata, ip_address, created_at")
+    .gte("created_at", thirtyDaysAgo)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  const auditRows = (auditRaw ?? []) as AuditRow[];
 
   return (
     <div className="flex flex-col gap-6">
@@ -134,6 +145,13 @@ export default async function PrivacyPage() {
             ))}
           </ul>
         )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Audit log"
+        description="The last 30 days of actions logged against your account — cross-fact pulls you triggered, moderation decisions, suspensions, deletion sweeps."
+      >
+        <AuditLog rows={auditRows} />
       </SettingsSection>
     </div>
   );
