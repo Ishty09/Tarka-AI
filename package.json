@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "verify:env": "node scripts/verify-env.mjs",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {
