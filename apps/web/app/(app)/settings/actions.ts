@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { LOCALES, type Locale } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Server actions for /settings/* pages. Every mutation runs as the signed-in
@@ -198,6 +199,7 @@ export async function requestDataExport(): Promise<ActionResult> {
     .insert({ user_id: user.id });
   if (error) return { ok: false, error: "Couldn't queue export." };
 
+  await trackServer("data_export_requested", { user_id: hashUserId(user.id) });
   revalidatePath("/settings/data");
   return { ok: true };
 }
@@ -213,6 +215,7 @@ export async function requestAccountDeletion(): Promise<ActionResult> {
     .eq("id", user.id);
   if (error) return { ok: false, error: "Couldn't queue deletion." };
 
+  await trackServer("account_deletion_requested", { user_id: hashUserId(user.id) });
   revalidatePath("/settings/data");
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { type Tier } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { activeCoupleLimitFor, generateInviteCode, inviteExpiry } from "@/lib/couples";
 
@@ -69,6 +70,7 @@ export async function createInvite(
     return { ok: false, error: "Couldn't create invite. Try again." };
   }
 
+  await trackServer("couple_link_created", { user_id: hashUserId(user.id) });
   revalidatePath("/couples");
   return {
     ok: true,
@@ -154,6 +156,7 @@ export async function acceptInvite(
     .eq("id", link.id);
   if (error) return { ok: false, error: "Couldn't accept invite." };
 
+  await trackServer("couple_link_accepted", { user_id: hashUserId(user.id) });
   revalidatePath("/couples");
   redirect(`/couples/${link.id}`);
 }
@@ -207,6 +210,12 @@ export async function setCrossFactConsent(formData: FormData): Promise<void> {
     .update({ [column]: parsed.data.enabled })
     .eq("id", parsed.data.link_id);
 
+  if (parsed.data.enabled) {
+    await trackServer("couple_cross_fact_enabled", {
+      user_id: hashUserId(user.id),
+      link_id: parsed.data.link_id,
+    });
+  }
   revalidatePath(`/couples/${parsed.data.link_id}`);
 }
 

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // OAuth + magic-link callback. Supabase issues a `code` in the URL; we
@@ -20,11 +21,19 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createServerSupabase();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
+
+  // §20 signup_completed fires once the session is established. This
+  // covers both genuinely-new signups and returning logins; the worker
+  // can disambiguate by checking profiles.created_at server-side if
+  // funnel reports need it.
+  await trackServer("signup_completed", {
+    user_id: hashUserId(data.user?.id ?? undefined),
+  });
 
   return NextResponse.redirect(`${origin}${next}`);
 }

@@ -246,6 +246,17 @@ async def moderate_persona(
         entity_id=persona_id,
         metadata={"notes": notes} if notes else None,
     )
+    if action == "approve":
+        # §20 persona_published fires when an admin approves a user-
+        # submitted persona, which makes it visible in the marketplace
+        # (visibility flip happens on publish flow downstream).
+        from app.services import analytics
+
+        await analytics.track_server(
+            "persona_published",
+            user_id=actor.user_id,
+            data={"persona_id": persona_id},
+        )
 
 
 async def moderate_feed_post(

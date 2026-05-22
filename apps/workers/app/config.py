@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="", alias="LANGFUSE_HOST")
+    umami_website_id: str = Field(default="", alias="NEXT_PUBLIC_UMAMI_WEBSITE_ID")
+    umami_script_url: str = Field(default="", alias="NEXT_PUBLIC_UMAMI_SCRIPT_URL")
 
     # ----- Push (Web Push + Expo; §3 + §13) ---------------------------------
     # VAPID keys for Web Push (RFC 8292). Both must be set for real delivery

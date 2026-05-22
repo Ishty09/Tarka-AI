@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { type Tier } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   maxActiveWagersForTier,
@@ -148,6 +149,10 @@ export async function createWager(
     return { ok: false, error: "Couldn't create wager. Try again." };
   }
 
+  await trackServer("wager_created", {
+    user_id: hashUserId(user.id),
+    wager_id: wagerRow.id,
+  });
   revalidatePath("/wagers");
   return {
     ok: true,
@@ -231,6 +236,11 @@ export async function createCheckin(
     return { ok: false, error: "Couldn't save check-in." };
   }
 
+  await trackServer("wager_checkin", {
+    user_id: hashUserId(user.id),
+    wager_id: parsed.data.wager_id,
+    status: parsed.data.status,
+  });
   revalidatePath(`/wagers/${parsed.data.wager_id}`);
   return { ok: true };
 }

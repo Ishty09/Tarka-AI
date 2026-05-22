@@ -11,7 +11,8 @@
     "./schemas": "./src/schemas/index.ts",
     "./prompts": "./src/prompts/index.ts",
     "./types": "./src/types/index.ts",
-    "./constants": "./src/constants.ts"
+    "./constants": "./src/constants.ts",
+    "./analytics": "./src/analytics.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

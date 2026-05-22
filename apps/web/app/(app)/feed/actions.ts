@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Roast feed voting (§9.2.5). Three-state toggle:
@@ -89,5 +90,11 @@ export async function castVote(formData: FormData): Promise<void> {
     .update({ upvotes, downvotes })
     .eq("id", post_id);
 
+  if (vote === 1 && (!existing || existing.vote !== 1)) {
+    await trackServer("roast_feed_post_upvoted", {
+      user_id: hashUserId(user.id),
+      post_id,
+    });
+  }
   revalidatePath("/feed");
 }

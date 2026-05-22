@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { trackServer } from "@/lib/analytics";
 import { env } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -40,6 +41,12 @@ export async function signInWithMagicLink(_prev: AuthActionResult | null, formDa
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // §20 signup_started — fires when a user requests a magic link. We
+  // can't tell apart "new" vs "returning" until callback, so this name
+  // covers both paths; the callback fires signup_completed once the
+  // session is established.
+  await trackServer("signup_started", { method: "magic_link" });
   return { ok: true };
 }
 
@@ -77,6 +84,7 @@ export async function signInWithOAuth(formData: FormData): Promise<never> {
   if (error || !data?.url) {
     redirect(`/login?error=${encodeURIComponent(error?.message ?? "oauth_failed")}`);
   }
+  await trackServer("signup_started", { method: parsed.data.provider });
   redirect(data.url);
 }
 

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError
 from supabase import AsyncClient
 
 from app.prompts.wager_evaluator import WAGER_EVALUATOR_PROMPT
+from app.services import analytics
 from app.services._db_typing import rows as _rows
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -223,7 +224,7 @@ async def persist_verdict(
             .eq("status", "active")  # guards against a parallel eval
             .execute()
         )
-    except Exception as err:  # noqa: BLE001 — best-effort
+    except Exception as err:
         log.warning("wager_evaluator.persist_failed", wager_id=wager_id, error=str(err))
         return False
     return True
@@ -325,6 +326,19 @@ async def evaluate_wager(
         return None
 
     capture_applied = await disburse(wager=wager, outcome=verdict.outcome)
+
+    event_name = (
+        "wager_succeeded" if verdict.outcome == "succeeded" else "wager_failed"
+    )
+    await analytics.track_server(
+        event_name,
+        user_id=str(wager.get("user_id") or ""),
+        data={
+            "wager_id": wager_id,
+            "stake_cents": wager.get("stake_cents"),
+            "capture_applied": capture_applied,
+        },
+    )
 
     return WagerEvaluation(
         wager_id=wager_id,

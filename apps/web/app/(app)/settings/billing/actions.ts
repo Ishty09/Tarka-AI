@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   cancelSubscriptionAtPeriodEnd,
@@ -52,6 +53,15 @@ export async function startCheckout(
     return { ok: false, error: friendlyPolarError(result.error, result.status) };
   }
 
+  // §20 upgrade_clicked — fires when the user commits to a checkout
+  // (just before the Polar redirect). The matching upgrade_completed
+  // fires from the Polar webhook handler in apps/workers.
+  await trackServer("upgrade_clicked", {
+    user_id: hashUserId(user.id),
+    tier: parsed.data.tier,
+    interval: parsed.data.interval,
+  });
+
   redirect(result.url);
 }
 
@@ -83,6 +93,7 @@ export async function cancelSubscriptionAction(): Promise<ActionResult> {
   if (!externalId) return { ok: false, error: "No active subscription to cancel." };
   const res = await cancelSubscriptionAtPeriodEnd(externalId);
   if (!res.ok) return { ok: false, error: friendlyPolarError(res.error, res.status) };
+  await trackServer("downgrade_clicked", { external_subscription_id: externalId });
   revalidatePath("/settings/billing");
   return { ok: true };
 }

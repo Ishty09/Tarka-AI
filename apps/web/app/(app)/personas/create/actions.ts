@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { PERSONA_SYSTEM_PROMPT_MAX_CHARS, LOCALES } from "@quarrel/shared/constants";
 import { personaCategorySchema } from "@quarrel/shared/schemas";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // User-created persona insert (§10.2).
@@ -66,6 +67,12 @@ export async function createPersona(
     }
     return { ok: false, error: "Couldn't create persona. Try again." };
   }
+
+  await trackServer("persona_created", {
+    user_id: hashUserId(user.id),
+    category: parsed.data.category,
+    locale: parsed.data.locale,
+  });
 
   redirect(`/personas/${slug}`);
 }

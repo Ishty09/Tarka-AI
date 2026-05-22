@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { type Tier } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { generateGroupInviteCode, maxSeatsForTier } from "@/lib/groups";
 
@@ -93,6 +94,10 @@ export async function createGroup(
     return { ok: false, error: "Couldn't seat you as owner. Try again." };
   }
 
+  await trackServer("group_room_created", {
+    user_id: hashUserId(user.id),
+    group_id: room.id,
+  });
   revalidatePath("/groups");
   return {
     ok: true,
@@ -153,6 +158,10 @@ export async function joinGroup(
     );
   if (error) return { ok: false, error: "Couldn't join the room." };
 
+  await trackServer("group_room_joined", {
+    user_id: hashUserId(user.id),
+    group_id: room.id,
+  });
   revalidatePath("/groups");
   redirect(`/groups/${room.id}`);
 }

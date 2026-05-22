@@ -32,6 +32,7 @@ import structlog
 from supabase import AsyncClient
 
 from app.config import get_settings
+from app.services import analytics
 from app.services._db_typing import row_or_none
 
 log = structlog.get_logger(__name__)
@@ -322,6 +323,23 @@ async def handle_event(
         await _sync_profile_tier(supabase, user_id=user_id, tier="free")
     else:
         await _sync_profile_tier(supabase, user_id=user_id, tier=tier)
+
+    # §20 — upgrade_completed fires on first activation; downgrade_completed
+    # fires on revoke (the period-end deletion that actually drops the tier).
+    if event.type in _ACTIVATING and derived_status in {"active", "trialing"}:
+        await analytics.track_server(
+            "upgrade_completed",
+            user_id=user_id,
+            tier=tier,
+            data={"polar_event_type": event.type},
+        )
+    elif event.type in _REVOKING:
+        await analytics.track_server(
+            "downgrade_completed",
+            user_id=user_id,
+            tier="free",
+            data={"from_tier": tier, "polar_event_type": event.type},
+        )
 
     return HandlerOutcome(status="applied")
 

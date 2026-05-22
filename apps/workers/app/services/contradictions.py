@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, ValidationError
 from supabase import AsyncClient
 
 from app.prompts.contradiction import CONTRADICTION_JUDGE_PROMPT
+from app.services import analytics
 from app.services._db_typing import rows as _rows
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -211,7 +212,7 @@ async def insert_contradiction(
             .upsert(payload, on_conflict="user_id,fact_a_id,fact_b_id", ignore_duplicates=True)
             .execute()
         )
-    except Exception as err:  # noqa: BLE001 — best-effort path
+    except Exception as err:
         log.warning(
             "contradictions.insert.failed",
             user_id=user_id,
@@ -275,6 +276,11 @@ async def run_for_user(
             )
             if inserted:
                 contradictions_inserted += 1
+                await analytics.track_server(
+                    "contradiction_surfaced",
+                    user_id=user_id,
+                    data={"severity": verdict.severity},
+                )
 
     log.info(
         "contradictions.user.done",
@@ -327,10 +333,10 @@ async def run_batch(
 
 
 __all__ = [
-    "ContradictionJudgment",
     "DEFAULT_MAX_CANDIDATES_PER_FACT",
     "DEFAULT_MAX_PAIRS_PER_USER",
     "DEFAULT_SEVERITY_THRESHOLD",
+    "ContradictionJudgment",
     "fetch_new_embedded_facts",
     "find_candidate_pairs",
     "find_users_with_new_facts",

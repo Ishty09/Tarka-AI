@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { track } from "@/lib/analytics/client";
 
 interface Props {
   messageId: number;
@@ -78,6 +79,10 @@ export function ShareToFeedDialog({ messageId, open, onClose }: Props) {
       setSuccess({
         postId: body.post?.id ?? "",
         status: body.post?.moderation_status === "flagged" ? "flagged" : "approved",
+      });
+      track("roast_feed_post_created", {
+        post_id: body.post?.id,
+        moderation_status: body.post?.moderation_status,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");

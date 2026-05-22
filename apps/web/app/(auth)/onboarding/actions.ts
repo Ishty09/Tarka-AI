@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { LOCALES } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Every onboarding write goes through here. Each action:
@@ -142,6 +143,11 @@ const personaPickSchema = z.object({
 export async function submitPersonaPick(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const parsed = personaPickSchema.safeParse({ persona_slug: formData.get("persona_slug") });
   if (!parsed.success) return { ok: false, error: "Pick a persona." };
+  // §20 persona_installed — onboarding step 6 "Pick first persona (one-
+  // click install)". The schema has no installed-personas join table yet
+  // (§4 directory note), so this event is the canonical record of
+  // first-time persona selection until that table lands.
+  await trackServer("persona_installed", { persona_slug: parsed.data.persona_slug });
   const params = new URLSearchParams({ persona: parsed.data.persona_slug });
   redirect(`/onboarding/daily-roast?${params.toString()}`);
 }
@@ -277,6 +283,11 @@ export async function submitLegal(_prev: ActionResult | null, formData: FormData
     })
     .eq("id", user.id);
   if (error) return { ok: false, error: "Couldn't finish onboarding. Try again." };
+
+  await trackServer("onboarding_completed", {
+    user_id: hashUserId(user.id),
+    marketing_consent: parsed.data.marketing,
+  });
 
   const target = parsed.data.persona_carry
     ? `/chat?persona=${encodeURIComponent(parsed.data.persona_carry)}`

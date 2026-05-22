@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Stamps mirror_reports.viewed_at when the user opens a report. Run via a
@@ -19,11 +20,18 @@ export async function markMirrorViewed(formData: FormData): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  await supabase
+  const { data: updated } = await supabase
     .from("mirror_reports")
     .update({ viewed_at: new Date().toISOString() })
     .eq("id", parsed.data.id)
-    .is("viewed_at", null);
+    .is("viewed_at", null)
+    .select("id");
 
+  if (updated && updated.length > 0) {
+    await trackServer("mirror_report_viewed", {
+      user_id: hashUserId(user.id),
+      report_id: parsed.data.id,
+    });
+  }
   revalidatePath("/mirror");
 }

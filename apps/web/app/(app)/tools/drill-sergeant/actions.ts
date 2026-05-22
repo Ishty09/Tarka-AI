@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { TIER_LIMITS, type Tier } from "@quarrel/shared/constants";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export type ActionResult = { ok: true; payload?: unknown } | { ok: false; error: string };
@@ -60,6 +61,10 @@ export async function createStreak(
     });
   if (error) return { ok: false, error: "Couldn't create habit." };
 
+  await trackServer("drill_sergeant_streak_started", {
+    user_id: hashUserId(user.id),
+    tier,
+  });
   revalidatePath("/tools/drill-sergeant");
   return { ok: true };
 }

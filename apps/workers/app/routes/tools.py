@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.prompts.council import DILEMMA_MAX_CHARS
+from app.services import analytics
 from app.services.breakup_analyzer import (
     DURATION_MAX_CHARS,
     THREAD_MAX_CHARS,
@@ -170,6 +171,7 @@ async def council(
         ) from err
 
     await increment_council_count(supabase, user_id)
+    await analytics.track_server("council_run", user_id=user_id)
 
     return CouncilResponse(
         conversation_id=run.conversation_id or "",
@@ -243,6 +245,7 @@ async def steelman(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "steelman_failed")
 
     await increment_message_count(supabase, user_id)
+    await analytics.track_server("steelman_used", user_id=user_id)
 
     return SteelmanResponse(
         conversation_id=run.conversation_id or "",
@@ -311,6 +314,7 @@ async def decision_killer(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "decision_killer_failed")
 
     await increment_message_count(supabase, user_id)
+    await analytics.track_server("decision_killer_used", user_id=user_id)
 
     return DecisionKillerResponse(
         conversation_id=run.conversation_id or "",
@@ -377,6 +381,7 @@ async def cope_detector(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "cope_detector_failed")
 
     await increment_message_count(supabase, user_id)
+    await analytics.track_server("cope_detector_used", user_id=user_id)
 
     return CopeDetectorResponse(
         conversation_id=run.conversation_id or "",
@@ -566,6 +571,12 @@ async def negotiation_start(
     except UnknownScenarioError as err:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown_scenario") from err
 
+    await analytics.track_server(
+        "negotiation_sparring_started",
+        user_id=user_id,
+        data={"scenario_slug": result.scenario.slug},
+    )
+
     return NegotiationStartResponse(
         conversation_id=result.conversation_id,
         scenario_slug=result.scenario.slug,
@@ -709,6 +720,7 @@ async def breakup_analyzer(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "breakup_analyzer_failed")
 
     await increment_message_count(supabase, user_id, count=BREAKUP_QUOTA_COST)
+    await analytics.track_server("breakup_analyzer_used", user_id=user_id)
 
     return BreakupAnalyzerResponse(
         conversation_id=run.conversation_id or "",

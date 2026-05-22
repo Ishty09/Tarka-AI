@@ -38,7 +38,7 @@ from supabase import AsyncClient
 
 from app.config import get_settings
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
-from app.services import fact_extraction
+from app.services import analytics, fact_extraction
 from app.services._db_typing import row_or_none
 from app.services._db_typing import rows as _rows
 from app.services.enforcement import (
@@ -179,6 +179,11 @@ async def chat_stream(
 
     quota = await check_quota(supabase, user_id=user_id, scope="messages")
     if quota.exceeded:
+        await analytics.track_server(
+            "quota_429",
+            user_id=user_id,
+            data={"scope": "messages", "tier": quota.tier, "limit": quota.limit},
+        )
         return _quota_exceeded_response(quota)
 
     # ----- Safety screen ------------------------------------------------------
@@ -364,6 +369,18 @@ async def _stream_assistant(
     )
 
     await increment_message_count(supabase, user_id)
+
+    # §20 chat_message_received — fires after we have an assistant turn
+    # to record. Fact-extraction is queued separately below.
+    await analytics.track_server(
+        "chat_message_received",
+        user_id=user_id,
+        data={
+            "conversation_id": conversation_id,
+            "latency_ms": latency_ms,
+            "cached_input_tokens": cached_tokens,
+        },
+    )
 
     await record_idempotency(
         supabase,

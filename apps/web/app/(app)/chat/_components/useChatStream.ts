@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { track } from "@/lib/analytics/client";
 
 // Custom streaming hook for the worker's SSE protocol.
 //
@@ -77,6 +78,12 @@ export function useChatStream(opts: UseChatStreamOptions) {
     };
     setMessages((prev) => [...prev, userTurn, assistantTurn]);
     setPending(true);
+
+    track("chat_message_sent", {
+      mode: opts.mode,
+      persona_slug: opts.personaSlug,
+      conversation_id: opts.conversationId,
+    });
 
     const controller = new AbortController();
     abortRef.current = controller;

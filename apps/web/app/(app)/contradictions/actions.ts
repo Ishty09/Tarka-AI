@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Contradiction Wall actions. Both run as the authenticated user — RLS
@@ -24,6 +25,10 @@ export async function dismissContradiction(formData: FormData): Promise<void> {
     .update({ dismissed_at: new Date().toISOString() })
     .eq("id", parsed.data.id);
 
+  await trackServer("contradiction_dismissed", {
+    user_id: hashUserId(user.id),
+    contradiction_id: parsed.data.id,
+  });
   revalidatePath("/contradictions");
 }
 
