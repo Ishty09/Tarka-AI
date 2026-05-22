@@ -1,0 +1,40 @@
+# Backup crontab for the production droplet (CLAUDE.md §25.1, §27 step 65).
+#
+# Install on the droplet with:
+#   sudo cp infra/backup/crontab /etc/cron.d/quarrel-backups
+#   sudo chmod 644 /etc/cron.d/quarrel-backups
+#   sudo systemctl restart cron
+#
+# Required env file: /etc/quarrel/backup.env (chmod 600, root-only).
+# It must export:
+#   PG_DUMP_AGE_RECIPIENT  age public key used for encryption.
+#   AWS_ACCESS_KEY_ID      DO Spaces access key.
+#   AWS_SECRET_ACCESS_KEY  DO Spaces secret.
+#   AWS_S3_ENDPOINT        https://<region>.digitaloceanspaces.com
+#   LITELLM_DB_DSN         postgres://… for the LiteLLM proxy DB.
+#   LANGFUSE_DB_DSN        postgres://… for Langfuse.
+#   UMAMI_DB_DSN           postgres://… for Umami.
+#   SUPABASE_DB_URL        Production Supabase Postgres DSN.
+#
+# Each line below sources that env file before running pg_dump.sh so the
+# secrets stay out of the crontab itself.
+
+MAILTO=ops@quarrel.ai
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Daily 03:00 UTC — self-hosted Postgres instances.
+0 3 * * * root . /etc/quarrel/backup.env && /opt/quarrel/infra/backup/pg_dump.sh "$LITELLM_DB_DSN"  quarrel-backups litellm/daily   >> /var/log/quarrel-backup.log 2>&1
+10 3 * * * root . /etc/quarrel/backup.env && /opt/quarrel/infra/backup/pg_dump.sh "$LANGFUSE_DB_DSN" quarrel-backups langfuse/daily  >> /var/log/quarrel-backup.log 2>&1
+20 3 * * * root . /etc/quarrel/backup.env && /opt/quarrel/infra/backup/pg_dump.sh "$UMAMI_DB_DSN"    quarrel-backups umami/daily     >> /var/log/quarrel-backup.log 2>&1
+
+# Weekly 04:00 UTC Sunday — Supabase off-site dump. The Supabase managed
+# tier already keeps 7 daily backups; this is the off-platform copy that
+# survives a full Supabase-side outage.
+0 4 * * 0 root . /etc/quarrel/backup.env && /opt/quarrel/infra/backup/pg_dump.sh "$SUPABASE_DB_URL" quarrel-backups supabase/weekly >> /var/log/quarrel-backup.log 2>&1
+
+# Weekly 05:00 UTC Sunday — Coolify volume backup. Coolify exposes
+# `coolify backup volumes --remote spaces:quarrel-backups/coolify` (see
+# https://coolify.io/docs/knowledge-base/backups). We wrap it so the env
+# file scope is consistent with the pg_dump runs.
+0 5 * * 0 root . /etc/quarrel/backup.env && coolify backup volumes --remote spaces:quarrel-backups/coolify >> /var/log/quarrel-backup.log 2>&1
