@@ -15,6 +15,7 @@
     "test": "turbo run test",
     "verify:env": "node scripts/verify-env.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "invite:beta": "node scripts/invite-beta.mjs",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {

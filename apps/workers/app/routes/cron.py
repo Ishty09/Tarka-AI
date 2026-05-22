@@ -16,6 +16,10 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.jobs.account_deletion import run_now as run_account_deletion_now
+from app.jobs.beta_invites import (
+    DEFAULT_BATCH_LIMIT as DEFAULT_BETA_INVITE_LIMIT,
+)
+from app.jobs.beta_invites import run_now as run_beta_invites_now
 from app.jobs.contradiction_batch import DEFAULT_LOOKBACK, run_nightly
 from app.jobs.daily_roast import run_now as run_daily_roast_now
 from app.jobs.data_export import DEFAULT_BATCH_LIMIT
@@ -373,4 +377,41 @@ async def account_deletion() -> AccountDeletionResponse:
         candidates=result.get("candidates", 0),
         deleted=result.get("deleted", 0),
         delete_failed=result.get("delete_failed", 0),
+    )
+
+
+class BetaInvitesRequest(BaseModel):
+    """Optional override of the per-tick send budget.
+
+    Default (none): DEFAULT_BETA_INVITE_LIMIT. Used to drain the
+    `beta_invites` queue Supabase admin links are rate-limited, so the
+    job processes invites sequentially within each tick.
+    """
+
+    limit: int | None = None
+
+
+class BetaInvitesResponse(BaseModel):
+    limit: int
+    queued: int
+    sent: int
+    failed: int
+
+
+@router.post(
+    "/beta-invites",
+    response_model=BetaInvitesResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def beta_invites(req: BetaInvitesRequest) -> BetaInvitesResponse:
+    limit = req.limit if req.limit and req.limit > 0 else DEFAULT_BETA_INVITE_LIMIT
+    if req.limit is None:
+        result = await run_beta_invites_now()
+    else:
+        result = await run_beta_invites_now(limit=limit)
+    return BetaInvitesResponse(
+        limit=limit,
+        queued=result.get("queued", 0),
+        sent=result.get("sent", 0),
+        failed=result.get("failed", 0),
     )

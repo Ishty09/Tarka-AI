@@ -136,6 +136,9 @@ SAMPLE_VARS: dict[str, dict[str, Any]] = {
         "entity_label": "south_park_dad",
         "reason": "Real-person impersonation isn't allowed in the marketplace.",
     },
+    "beta_invite": {
+        "signup_url": "https://quarrel.ai/onboarding?token=abc",
+    },
 }
 
 

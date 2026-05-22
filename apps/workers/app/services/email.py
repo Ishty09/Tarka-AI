@@ -61,6 +61,7 @@ TemplateName = Literal[
     "mirror_report_ready",
     "eulogy_ready",
     "moderation_rejection",
+    "beta_invite",
 ]
 
 
@@ -404,6 +405,36 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("entity_type", "entity_label", "reason"),
+    ),
+    "beta_invite": Template(
+        name="beta_invite",
+        subject="You're in for the Quarrel beta",
+        html=_wrap(
+            "<h1 style='margin-top:0'>You're in.</h1>"
+            "<p>Quarrel is in closed beta. We hand-picked a small group of "
+            "people we think will press hard on the product — you're one of "
+            "them.</p>"
+            "<p><a href='{{ signup_url }}' style='display:inline-block;"
+            "background:#0a0a0a;color:#fafafa;padding:12px 24px;border-radius:"
+            "8px;text-decoration:none;font-weight:500'>Open Quarrel</a></p>"
+            "<p style='color:#6b7280;font-size:13px'>The link signs you in "
+            "without a password. It expires in 24 hours; reply to this email "
+            "if it lapses and we'll send another.</p>"
+            "<p style='color:#6b7280;font-size:13px'>What we want from you: "
+            "tell us when Quarrel is too soft, when it's too cruel, and when "
+            "it forgets something it shouldn't have.</p>"
+        ),
+        text=(
+            "You're in. Quarrel is in closed beta.\n\n"
+            "Open: {{ signup_url }}\n\n"
+            "The link signs you in without a password. It expires in 24 "
+            "hours; reply to this email if it lapses and we'll send another.\n\n"
+            "What we want from you: tell us when Quarrel is too soft, when "
+            "it's too cruel, and when it forgets something it shouldn't "
+            "have.\n"
+        ),
+        transactional=True,
+        required_vars=("signup_url",),
     ),
 }
 
