@@ -18,6 +18,7 @@ from supabase import AsyncClient
 
 from app.prompts.future_self import FUTURE_SELF_PROMPT
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -61,11 +62,11 @@ async def generate_future_self_message(
             temperature=0.7,
             max_tokens=600,
             user=user_id,
-            metadata={
-                "generation_name": "future_self",
-                "trace_user_id": user_id,
-                "tags": ["future_self"],
-            },
+            metadata=build_trace_metadata(
+                name="future_self",
+                user_id=user_id,
+                mode="future_self",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("future_self.llm_error", user_id=user_id, error=str(err))

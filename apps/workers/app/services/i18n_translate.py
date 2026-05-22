@@ -22,6 +22,7 @@ from typing import Any
 import structlog
 
 from app.prompts.i18n_translate import I18N_TRANSLATE_PROMPT
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -180,10 +181,11 @@ async def translate_keys(
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
-            metadata={
-                "generation_name": "i18n_translate",
-                "tags": ["i18n", target_locale],
-            },
+            metadata=build_trace_metadata(
+                name="i18n_translate",
+                mode="i18n",
+                locale=target_locale,
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         raise TranslationError(f"LLM call failed for {target_locale}: {err}") from err

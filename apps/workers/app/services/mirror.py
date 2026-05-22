@@ -22,6 +22,7 @@ from supabase import AsyncClient
 
 from app.prompts.mirror_mode import MIRROR_MODE_PROMPT
 from app.services._db_typing import rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -101,11 +102,11 @@ async def generate_report(
             temperature=0.4,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "mirror_mode",
-                "tags": ["mirror_mode"],
-                "trace_user_id": user_id,
-            },
+            metadata=build_trace_metadata(
+                name="mirror_mode",
+                user_id=user_id,
+                mode="mirror_mode",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("mirror.generate.llm_error", user_id=user_id, error=str(err))

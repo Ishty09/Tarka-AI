@@ -23,6 +23,7 @@ from supabase import AsyncClient
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
 from app.prompts.council import COUNCIL_SLUGS, JUDGE_SYSTEM_PROMPT
 from app.services._db_typing import rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -115,11 +116,12 @@ async def _run_councilor(
             temperature=0.5,
             max_tokens=MAX_COUNCILOR_TOKENS,
             user=user_id,
-            metadata={
-                "generation_name": f"council.{slug}",
-                "trace_user_id": user_id,
-                "tags": ["council", slug],
-            },
+            metadata=build_trace_metadata(
+                name=f"council.{slug}",
+                user_id=user_id,
+                mode="council",
+                persona_slug=slug,
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("council.member.failed", slug=slug, error=str(err))
@@ -197,11 +199,12 @@ async def run_judge(
             temperature=0.3,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "council.judge",
-                "trace_user_id": user_id,
-                "tags": ["council", "judge"],
-            },
+            metadata=build_trace_metadata(
+                name="council.judge",
+                user_id=user_id,
+                mode="council",
+                persona_slug="judge",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("council.judge.llm_error", error=str(err))

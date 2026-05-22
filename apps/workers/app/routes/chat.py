@@ -39,6 +39,7 @@ from supabase import AsyncClient
 from app.config import get_settings
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
 from app.services import analytics, fact_extraction
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services._db_typing import row_or_none
 from app.services._db_typing import rows as _rows
 from app.services.enforcement import (
@@ -273,6 +274,19 @@ async def chat_stream(
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_blocks}, *history]
 
+    # §21 trace context. Profile fetch is one extra row; the chat path
+    # already touches profiles via quotas, so this is cheap.
+    profile_res = (
+        await supabase.table("profiles")
+        .select("tier, locale")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    profile_row = row_or_none(profile_res.data if profile_res is not None else None) or {}
+    trace_mode = conversation.get("mode") or req.mode
+    trace_persona_slug = conversation.get("persona_slug") or req.persona_slug
+
     return StreamingResponse(
         _stream_assistant(
             llm=llm,
@@ -285,6 +299,13 @@ async def chat_stream(
             user_message=req.message,
             user_message_id=user_message_id,
             callout=callout,
+            trace_name=f"{trace_mode}.{trace_persona_slug}"
+            if trace_mode and trace_persona_slug
+            else "chat.stream",
+            mode=trace_mode if isinstance(trace_mode, str) else None,
+            persona_slug=trace_persona_slug if isinstance(trace_persona_slug, str) else None,
+            tier=profile_row.get("tier") if isinstance(profile_row.get("tier"), str) else None,
+            locale=profile_row.get("locale") if isinstance(profile_row.get("locale"), str) else None,
         ),
         media_type="text/event-stream",
     )
@@ -305,6 +326,12 @@ async def _stream_assistant(
     user_message: str,
     user_message_id: int,
     callout: ContradictionCallout | None = None,
+    # §21 trace context — name/mode/persona/tier/locale resolved upstream.
+    trace_name: str = "chat.stream",
+    mode: str | None = None,
+    persona_slug: str | None = None,
+    tier: str | None = None,
+    locale: str | None = None,
 ) -> AsyncIterator[bytes]:
     started_at = time.perf_counter()
     accumulated: list[str] = []
@@ -338,12 +365,15 @@ async def _stream_assistant(
             model=QUARREL_ARGUE,
             messages=messages,
             user=user_id,
-            metadata={
-                "generation_name": "chat.stream",
-                "trace_user_id": user_id,
-                "session_id": conversation_id,
-                "tags": ["chat.stream"],
-            },
+            metadata=build_trace_metadata(
+                name=trace_name,
+                user_id=user_id,
+                session_id=conversation_id,
+                mode=mode,
+                persona_slug=persona_slug,
+                tier=tier,
+                locale=locale,
+            ),
         ):
             if chunk.delta:
                 accumulated.append(chunk.delta)
@@ -523,6 +553,8 @@ async def _resolve_conversation(
             "system_prompt_overridden": override is not None,
             "couple_link_id": row.get("couple_link_id"),
             "group_room_id": row.get("group_room_id"),
+            "mode": row.get("mode"),
+            "persona_slug": persona.get("slug"),
         }
 
     if persona_slug is None:
@@ -543,13 +575,15 @@ async def _resolve_conversation(
         "id": new_id,
         "persona_system_prompt": persona["system_prompt"],
         "couple_link_id": couple_link_id,
+        "mode": mode,
+        "persona_slug": persona_slug,
     }
 
 
 async def _load_persona_by_id(supabase: AsyncClient, persona_id: str) -> dict[str, Any]:
     res = (
         await supabase.table("personas")
-        .select("id, system_prompt")
+        .select("id, slug, system_prompt")
         .eq("id", persona_id)
         .maybe_single()
         .execute()

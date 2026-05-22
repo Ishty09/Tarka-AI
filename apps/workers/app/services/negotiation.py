@@ -27,6 +27,7 @@ from supabase import AsyncClient
 from app.prompts.anti_sycophant_base import ANTI_SYCOPHANT_BASE_PROMPT
 from app.prompts.negotiation import CRITIQUE_PROMPT, SCENARIOS, Scenario
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -253,11 +254,12 @@ async def generate_critique(
             temperature=0.3,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "negotiation_critique",
-                "trace_user_id": user_id,
-                "tags": ["negotiation_critique", scenario.slug],
-            },
+            metadata=build_trace_metadata(
+                name="negotiation.critique",
+                user_id=user_id,
+                mode="negotiation",
+                extra={"scenario_slug": scenario.slug},
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("negotiation.critique.llm_error", error=str(err))

@@ -20,6 +20,7 @@ from supabase import AsyncClient
 
 from app.prompts.drill_sergeant import ESCALATION_TIERS, TIER_PROMPTS
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_CHEAP,
     LiteLLMClient,
@@ -232,11 +233,12 @@ async def generate_drill_message(
             temperature=0.7,
             max_tokens=180,
             user=candidate.user_id,
-            metadata={
-                "generation_name": f"drill_sergeant.tier_{candidate.tier}",
-                "trace_user_id": candidate.user_id,
-                "tags": ["drill_sergeant", f"tier_{candidate.tier}"],
-            },
+            metadata=build_trace_metadata(
+                name=f"drill_sergeant.tier_{candidate.tier}",
+                user_id=candidate.user_id,
+                mode="drill_sergeant",
+                extra={"escalation_tier": candidate.tier},
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning(

@@ -21,6 +21,7 @@ import structlog
 from pydantic import BaseModel, Field, ValidationError
 
 from app.prompts.safety_screen import SAFETY_SCREEN_PROMPT
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_CHEAP,
     LiteLLMClient,
@@ -113,12 +114,12 @@ async def classify_message(
             temperature=0.0,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "safety_screen",
-                "trace_user_id": user_id,
-                "session_id": conversation_id,
-                "tags": ["safety_screen"],
-            },
+            metadata=build_trace_metadata(
+                name="safety.screen",
+                user_id=user_id,
+                session_id=conversation_id,
+                mode="safety",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning(

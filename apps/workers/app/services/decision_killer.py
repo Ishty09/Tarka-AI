@@ -18,6 +18,7 @@ from supabase import AsyncClient
 
 from app.prompts.decision_killer import DECISION_KILLER_PROMPT
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -69,11 +70,11 @@ async def generate_decision_killer(
             temperature=0.5,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "decision_killer",
-                "trace_user_id": user_id,
-                "tags": ["decision_killer"],
-            },
+            metadata=build_trace_metadata(
+                name="decision_killer",
+                user_id=user_id,
+                mode="decision_killer",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("decision_killer.llm_error", user_id=user_id, error=str(err))

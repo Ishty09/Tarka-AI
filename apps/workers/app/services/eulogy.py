@@ -20,6 +20,7 @@ from supabase import AsyncClient
 
 from app.prompts.eulogy import EULOGY_PROMPT
 from app.services._db_typing import rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -224,11 +225,11 @@ async def generate_eulogy_text(
             ],
             temperature=0.6,
             user=user_id,
-            metadata={
-                "generation_name": "eulogy",
-                "tags": ["eulogy"],
-                "trace_user_id": user_id,
-            },
+            metadata=build_trace_metadata(
+                name="eulogy",
+                user_id=user_id,
+                mode="eulogy",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("eulogy.generate.llm_error", user_id=user_id, error=str(err))

@@ -17,6 +17,7 @@ from supabase import AsyncClient
 
 from app.prompts.cope_detector import COPE_DETECTOR_PROMPT
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -63,11 +64,11 @@ async def generate_cope_detector(
             temperature=0.5,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "cope_detector",
-                "trace_user_id": user_id,
-                "tags": ["cope_detector"],
-            },
+            metadata=build_trace_metadata(
+                name="cope_detector",
+                user_id=user_id,
+                mode="cope_detector",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("cope_detector.llm_error", user_id=user_id, error=str(err))

@@ -26,6 +26,7 @@ from supabase import AsyncClient
 from app.prompts.wager_evaluator import WAGER_EVALUATOR_PROMPT
 from app.services import analytics
 from app.services._db_typing import rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -128,11 +129,11 @@ async def generate_verdict(
             temperature=0.2,
             response_format={"type": "json_object"},
             user=str(wager.get("user_id") or ""),
-            metadata={
-                "generation_name": "wager_evaluator",
-                "trace_user_id": str(wager.get("user_id") or ""),
-                "tags": ["wager_evaluator"],
-            },
+            metadata=build_trace_metadata(
+                name="wager_evaluator",
+                user_id=str(wager.get("user_id") or "") or None,
+                mode="wager_evaluator",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("wager_evaluator.llm_error", wager_id=wager.get("id"), error=str(err))

@@ -24,6 +24,7 @@ from supabase import AsyncClient
 
 from app.prompts.daily_roast import DAILY_ROAST_PROMPT
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_CHEAP,
     LiteLLMClient,
@@ -323,11 +324,12 @@ async def generate_roast(
             temperature=0.8,
             max_tokens=180,
             user=recipient.user_id,
-            metadata={
-                "generation_name": "daily_roast",
-                "trace_user_id": recipient.user_id,
-                "tags": ["daily_roast", recipient.persona_slug],
-            },
+            metadata=build_trace_metadata(
+                name="daily_roast",
+                user_id=recipient.user_id,
+                mode="daily_roast",
+                persona_slug=recipient.persona_slug,
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning(

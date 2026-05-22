@@ -22,6 +22,7 @@ from app.prompts.roast_my_x import (
     TARGET_LABELS,
 )
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -87,11 +88,12 @@ async def generate_roast(
             temperature=0.85,
             max_tokens=400,
             user=user_id,
-            metadata={
-                "generation_name": "roast_my_x",
-                "trace_user_id": user_id,
-                "tags": ["roast_my_x", target],
-            },
+            metadata=build_trace_metadata(
+                name="roast_my_x",
+                user_id=user_id,
+                mode="roast_my_x",
+                extra={"target": target},
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("roast_my_x.llm_error", target=target, user_id=user_id, error=str(err))

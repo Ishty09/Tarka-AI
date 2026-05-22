@@ -16,6 +16,7 @@ import structlog
 from pydantic import BaseModel, Field, ValidationError
 
 from app.prompts.moderation import CONTENT_MODERATION_PROMPT
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_CHEAP,
     LiteLLMClient,
@@ -77,11 +78,12 @@ async def moderate(
             temperature=0.0,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "moderation",
-                "trace_user_id": user_id,
-                "tags": ["moderation", kind],
-            },
+            metadata=build_trace_metadata(
+                name="moderation",
+                user_id=user_id,
+                mode="moderation",
+                extra={"kind": kind},
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("moderation.llm_error", kind=kind, error=str(err))

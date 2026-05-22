@@ -21,6 +21,7 @@ from supabase import AsyncClient
 
 from app.prompts.breakup_analyzer import BREAKUP_ANALYZER_PROMPT
 from app.services._db_typing import row_or_none, rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -135,11 +136,11 @@ async def generate_breakup_analysis(
             temperature=0.4,
             response_format={"type": "json_object"},
             user=user_id,
-            metadata={
-                "generation_name": "breakup_analyzer",
-                "trace_user_id": user_id,
-                "tags": ["breakup_analyzer"],
-            },
+            metadata=build_trace_metadata(
+                name="breakup_analyzer",
+                user_id=user_id,
+                mode="breakup_analyzer",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("breakup_analyzer.llm_error", user_id=user_id, error=str(err))

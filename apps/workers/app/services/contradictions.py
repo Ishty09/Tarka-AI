@@ -28,6 +28,7 @@ from supabase import AsyncClient
 from app.prompts.contradiction import CONTRADICTION_JUDGE_PROMPT
 from app.services import analytics
 from app.services._db_typing import rows as _rows
+from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
     LiteLLMClient,
@@ -85,10 +86,10 @@ async def judge_pair(
             ],
             temperature=0.0,
             response_format={"type": "json_object"},
-            metadata={
-                "generation_name": "contradiction_judge",
-                "tags": ["contradiction_judge"],
-            },
+            metadata=build_trace_metadata(
+                name="contradiction.judge",
+                mode="contradiction",
+            ),
         )
     except (LiteLLMError, LiteLLMNetworkError) as err:
         log.warning("contradictions.judge.llm_error", error=str(err))
