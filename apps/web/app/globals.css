@@ -79,3 +79,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Landing hero chat-demo entrance — three messages fade + slide in
+   in sequence. Pure CSS so the hero stays SSR-only. */
+@keyframes hero-demo-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-demo-message {
+  opacity: 0;
+  animation: hero-demo-message-in 400ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-demo-message {
+    animation: none;
+    opacity: 1;
+  }
+}
