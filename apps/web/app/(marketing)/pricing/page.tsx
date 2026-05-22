@@ -2,6 +2,8 @@ import Link from "next/link";
 import { TIER_LIMITS } from "@quarrel/shared/constants";
 import { polarEnabled } from "@/lib/wagers";
 import { CheckoutForm } from "./CheckoutForm";
+import { ComparisonTable } from "./ComparisonTable";
+import { PricingFAQ } from "./PricingFAQ";
 
 // Pricing page — three tiers, billing-interval toggle. All features at
 // every tier (§8); the columns spell out the per-tier limits. CTAs
@@ -116,6 +118,19 @@ export default async function PricingPage({ searchParams }: PageProps) {
         </Link>
         .
       </p>
+
+      <section className="mt-6 flex flex-col gap-3">
+        <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          Side-by-side.
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Every feature is available at every tier. These are the limits the
+          system actually enforces.
+        </p>
+        <ComparisonTable />
+      </section>
+
+      <PricingFAQ />
     </main>
   );
 }
