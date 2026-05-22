@@ -13,6 +13,7 @@ file is read top-to-bottom during a real situation — no skimming.
 | [`database-migrations.md`](./database-migrations.md) | Authoring or applying a Supabase migration; handling production schema issues. |
 | [`safety-triage.md`](./safety-triage.md)         | Daily review of `safety_incidents`, moderation queues, abuse / minor-safety / threat handling. |
 | [`env-vars.md`](./env-vars.md)                   | Per-variable owner table, where each value lives, pre-deploy checklist. |
+| [`smoke-tests.md`](./smoke-tests.md)             | What `pnpm smoke` covers; when to run; the deeper signed-in checklist. |
 | [`../SECRETS.md`](../SECRETS.md)                 | Quarterly rotation, emergency rotation, per-secret procedures.        |
 
 Companion scripts and config live one level up:
