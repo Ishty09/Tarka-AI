@@ -76,3 +76,8 @@ supabase/.temp/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Operator data — real invitee lists, etc. Only .example files are tracked.
+data/*
+!data/README.md
+!data/*.example

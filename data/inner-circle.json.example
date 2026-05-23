@@ -1,0 +1,42 @@
+[
+  {
+    "email": "friend1@example.com",
+    "notes": "ex-coworker, indie hacker, will actually press hard on the product"
+  },
+  {
+    "email": "friend2@example.com",
+    "notes": "writer, likely candidate for the Mirror Mode flow"
+  },
+  {
+    "email": "friend3@example.com",
+    "notes": "founder, will try Council on a real decision"
+  },
+  {
+    "email": "friend4@example.com",
+    "notes": "designer, will care about the Roast My LinkedIn flow"
+  },
+  {
+    "email": "friend5@example.com",
+    "notes": ""
+  },
+  {
+    "email": "friend6@example.com",
+    "notes": ""
+  },
+  {
+    "email": "friend7@example.com",
+    "notes": ""
+  },
+  {
+    "email": "friend8@example.com",
+    "notes": ""
+  },
+  {
+    "email": "friend9@example.com",
+    "notes": ""
+  },
+  {
+    "email": "friend10@example.com",
+    "notes": ""
+  }
+]
