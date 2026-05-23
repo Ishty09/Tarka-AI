@@ -16,6 +16,7 @@ file is read top-to-bottom during a real situation — no skimming.
 | [`smoke-tests.md`](./smoke-tests.md)             | What `pnpm smoke` covers; when to run; the deeper signed-in checklist. |
 | [`beta-cohort.md`](./beta-cohort.md)             | Hand-picked beta invitees: staging the list, triggering sends, retention query for §28. |
 | [`product-hunt-launch.md`](./product-hunt-launch.md) | T-14 → T+7d launch playbook: assets, timing, comment SLA, status-page protocol, retro template. |
+| [`public-launch.md`](./public-launch.md)         | §28 go/no-go checklist + hour-by-hour launch-day procedure + soft/hard bail-out. The single page the founder reads on launch day. |
 | [`../SECRETS.md`](../SECRETS.md)                 | Quarterly rotation, emergency rotation, per-secret procedures.        |
 
 Companion scripts and config live one level up:

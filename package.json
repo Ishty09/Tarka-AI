@@ -17,6 +17,7 @@
     "smoke": "node scripts/smoke.mjs",
     "invite:beta": "node scripts/invite-beta.mjs",
     "report:retention": "node scripts/report-retention.mjs",
+    "launch-check": "node scripts/launch-check.mjs",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {
