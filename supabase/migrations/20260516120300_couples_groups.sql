@@ -37,12 +37,6 @@ create table group_rooms (
   created_at timestamptz not null default now()
 );
 
-alter table group_rooms enable row level security;
-create policy group_rooms_member on group_rooms for select using (
-  owner_id = auth.uid()
-  or exists (select 1 from group_members where group_id = id and user_id = auth.uid())
-);
-
 
 create table group_members (
   group_id uuid not null references group_rooms(id) on delete cascade,
@@ -50,6 +44,16 @@ create table group_members (
   role text not null default 'member' check (role in ('owner','member')),
   joined_at timestamptz not null default now(),
   primary key (group_id, user_id)
+);
+
+
+-- Policies live below the tables they reference: group_rooms_member's
+-- USING clause looks up group_members, so the table must exist first.
+
+alter table group_rooms enable row level security;
+create policy group_rooms_member on group_rooms for select using (
+  owner_id = auth.uid()
+  or exists (select 1 from group_members where group_id = id and user_id = auth.uid())
 );
 
 alter table group_members enable row level security;
