@@ -3,6 +3,12 @@ import Link from "next/link";
 // Apex landing hero (CLAUDE.md §17). Above-the-fold copy + CTA + a
 // three-message demo conversation. The animation is pure CSS — no client
 // component, no JS, no layout shift. Loads under 5KB on the wire.
+//
+// §27 step 74: when NEXT_PUBLIC_PRODUCT_HUNT_URL is set in Vercel, the
+// hero renders a Product Hunt pill above the H1 linking to the listing.
+// Empty / unset = no pill. Flip it on at T-0 and off at T+48h.
+
+const PRODUCT_HUNT_URL = process.env.NEXT_PUBLIC_PRODUCT_HUNT_URL;
 
 const DEMO: { from: "user" | "ai"; text: string }[] = [
   {
@@ -26,9 +32,21 @@ export function Hero() {
     <section className="relative overflow-hidden border-b">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 py-20 md:grid-cols-2 md:gap-8 md:py-32">
         <div className="flex flex-col justify-center gap-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Quarrel AI
-          </p>
+          {PRODUCT_HUNT_URL ? (
+            <a
+              href={PRODUCT_HUNT_URL}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-orange-400/40 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-900 hover:bg-orange-100"
+            >
+              <span aria-hidden>🚀</span>
+              We&apos;re live on Product Hunt — upvote here →
+            </a>
+          ) : (
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Quarrel AI
+            </p>
+          )}
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl">
             The AI that won&apos;t let you lie to yourself.
           </h1>

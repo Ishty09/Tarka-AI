@@ -15,6 +15,7 @@ file is read top-to-bottom during a real situation — no skimming.
 | [`env-vars.md`](./env-vars.md)                   | Per-variable owner table, where each value lives, pre-deploy checklist. |
 | [`smoke-tests.md`](./smoke-tests.md)             | What `pnpm smoke` covers; when to run; the deeper signed-in checklist. |
 | [`beta-cohort.md`](./beta-cohort.md)             | Hand-picked beta invitees: staging the list, triggering sends, retention query for §28. |
+| [`product-hunt-launch.md`](./product-hunt-launch.md) | T-14 → T+7d launch playbook: assets, timing, comment SLA, status-page protocol, retro template. |
 | [`../SECRETS.md`](../SECRETS.md)                 | Quarterly rotation, emergency rotation, per-secret procedures.        |
 
 Companion scripts and config live one level up:
