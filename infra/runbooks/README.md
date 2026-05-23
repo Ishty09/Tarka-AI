@@ -9,6 +9,7 @@ file is read top-to-bottom during a real situation — no skimming.
 | [`uptimerobot.md`](./uptimerobot.md)             | Adding or pausing an external uptime monitor. Defines the canonical monitor set. |
 | [`status-page.md`](./status-page.md)             | Posting an incident on `status.quarrel.ai`, configuring Uptime Kuma, or onboarding a new public component. |
 | [`backups.md`](./backups.md)                     | Verifying daily/weekly backups; running a restore drill; recovering from a database outage. |
+| [`first-deploy.md`](./first-deploy.md)           | One-time: walks from §26 accounts through the first end-to-end production deploy + dogfood window. |
 | [`deploy.md`](./deploy.md)                       | Shipping a change. Web (Vercel) and workers (Coolify) procedures, including rollback. |
 | [`database-migrations.md`](./database-migrations.md) | Authoring or applying a Supabase migration; handling production schema issues. |
 | [`safety-triage.md`](./safety-triage.md)         | Daily review of `safety_incidents`, moderation queues, abuse / minor-safety / threat handling. |
