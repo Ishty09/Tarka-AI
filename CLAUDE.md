@@ -2153,6 +2153,23 @@ Ship when all true:
 2026-05-16 — Couples mode requires triple opt-in for cross-fact retrieval.
 2026-05-16 — Drill Sergeant escalation: gentle → pointed → brutal → eulogy on miss days 1/3/7/14.
 2026-05-16 — Mirror Mode weekly, Eulogy Test quarterly.
+2026-05-21 — next-intl with no URL locale prefix; locale resolved from profile → NEXT_LOCALE cookie → Accept-Language. Marketing pages stay at `/` so no `/en/` redirect.
+2026-05-21 — Legal pages publish in 6 launch locales; non-launch locales render English with a "translation pending" banner instead of pre-rendering 36 stubs. Lawyer-grade translations are not a step-53 LLM-batch concern.
+2026-05-21 — Legal pages use a tiny inline markdown→JSX parser instead of adding react-markdown. §22 forbids `dangerouslySetInnerHTML` without sanitisation; the subset (headings, lists, links, em/strong/code) is enough.
+2026-05-21 — EU AI Act first-run modal ack stored in HTTP-only `quarrel_eu_ai_ack` cookie (1 year), not on profiles. Audit-of-record is `profiles.onboarding_completed_at` (already captures the checkbox); cookie is a UX hint.
+2026-05-21 — Cookie banner is informational only — no Accept/Decline. Umami is cookieless and the cookies we set are strictly necessary (auth session, CSRF, locale, AI-Act ack); ePrivacy obligation is to inform, not consent.
+2026-05-21 — GDPR data exports persist in a new `data_export_requests` table, written to a private `data-exports` Supabase Storage bucket, emailed as a 7-day signed URL. Push subscription tokens are redacted on export (credentials, not data).
+2026-05-21 — `audit_log.actor_user_id` FK flipped to `ON DELETE SET NULL` so retained audit rows survive the cascade when a user is hard-deleted by the §58 sweeper. Audit retention is 12 months post-deletion.
+2026-05-21 — User-facing audit log surfaced via an additional RLS policy on `audit_log` (`actor_user_id = auth.uid()` OR entity-is-self), not a SECURITY DEFINER RPC. Writes stay service-role-only.
+2026-05-22 — Sentry runs with `send_default_pii=False` plus a per-call `before_send` scrubber that strips every header whose name contains a vendor or credential keyword (`authorization`, `cookie`, `api-key`, `supabase`, `litellm`, `polar`, `resend`, `vapid`, `openai`, `anthropic`, `service-role`) and drops request body keys (`data`/`json`/`form`) wholesale. Session replays kept off pending a privacy review of chat content exposure.
+2026-05-22 — Umami event payloads always carry a sha256[:16] hash of `user_id`, never the raw uuid. §20 events covered in step 61; 4 events (`wager_payment_confirmed`, `emergency_contact_notified`, `crisis_resource_shown`, `fallback_used`) tied to features that haven't landed yet and fire when the feature does.
+2026-05-22 — Langfuse trace name pattern: `<mode>.<persona_slug>` for streamed chat turns, single-word names (`eulogy`, `mirror_mode`, `contradiction.judge`, `safety.screen`, …) for batch jobs. Tags carry `[mode, persona_slug, tier, locale]` filtered to non-empty fields.
+2026-05-23 — Status page on self-hosted Uptime Kuma over Atlassian Statuspage. Matches the §3 self-host pattern; runs as another Coolify service. Five public components: Web, Workers, LiteLLM, Supabase (synthetic), Polar (synthetic). 30-minute incident-update SLA codified as T+10/T+30.
+2026-05-23 — Backups: `pg_dump` → `gzip --best` → `age` encrypt → DO Spaces. Age private key 1Password-only; recipient (public key) lives on the droplet. Restore drill rotation: LiteLLM → Langfuse → Umami → Supabase off-site → Coolify volume, one per month.
+2026-05-24 — Beta cohort tracked in `beta_invites(email, cohort_tag)`-unique table. Workers cron at `/cron/beta-invites` drains it using Supabase admin `generate_link({type: 'magiclink'})` + the `beta_invite` Resend template. A profiles trigger backfills `signed_up_at` for the §73 retention join.
+2026-05-24 — `cohort_retention` view defines "retained" as ≥ 1 `role='user'` message between [signup+1d, signup+8d). §28 launch gate ≥ 30% surfaced on `/admin/retention` + `pnpm report:retention`. Exit codes wire the SQL into the launch-day decision.
+2026-05-24 — Marketing landing copy stays English-only for launch; legal + push-notification strings are the only i18n surfaces. Step-53 translation job stays narrowly scoped to UI message bundles.
+2026-05-24 — Public launch is gated by `pnpm launch-check` (env + typecheck + tests + smoke + retention) AND a non-automated checklist (legal review, Polar test purchase, crisis-flow native-speaker tests, founder mental-load). A green launch-check is never a substitute for the manual rows.
 ```
 
 ---
