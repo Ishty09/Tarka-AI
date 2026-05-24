@@ -18,10 +18,14 @@ import {
   negotiateLocale,
 } from "./routing";
 
-async function loadMessages(locale: string): Promise<Record<string, string>> {
+// next-intl messages are nested objects (e.g. `cookie_banner.body` is
+// resolved as messages.cookie_banner.body). Type accordingly.
+type Messages = Record<string, unknown>;
+
+async function loadMessages(locale: string): Promise<Messages> {
   // Static imports keep tree-shaking + edge-runtime compatibility intact.
   // Add new locales here as they land (§27 step 53 backfill).
-  const bundles: Record<string, () => Promise<{ default: Record<string, string> }>> = {
+  const bundles: Record<string, () => Promise<{ default: Messages }>> = {
     en: () => import("../messages/en.json"),
     bn: () => import("../messages/bn.json"),
     hi: () => import("../messages/hi.json"),
