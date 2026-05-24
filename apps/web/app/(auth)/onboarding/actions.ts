@@ -46,9 +46,20 @@ export async function submitProfile(_prev: ActionResult | null, formData: FormDa
   );
 
   if (error) {
-    // 23505 unique_violation on username
+    // Surface the underlying Supabase error code + message so we can
+    // diagnose RLS / constraint failures from the UI instead of a
+    // generic "Try again." 23505 keeps its friendly label.
+    console.error("submitProfile.upsert failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     if (error.code === "23505") return { ok: false, error: "That username is taken." };
-    return { ok: false, error: "Couldn't save your profile. Try again." };
+    return {
+      ok: false,
+      error: `Save failed [${error.code ?? "?"}] ${error.message ?? "unknown"}`,
+    };
   }
   redirect("/onboarding/locale");
 }
