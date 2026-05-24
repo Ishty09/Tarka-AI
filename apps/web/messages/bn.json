@@ -1,27 +1,51 @@
 {
-  "app.name": "Quarrel",
-  "app.tagline": "যে AI তোমাকে নিজের সাথে মিথ্যা বলতে দেবে না।",
-  "ai_disclosure.title": "তুমি একটি AI-এর সাথে কথা বলছ।",
-  "ai_disclosure.body": "Quarrel একটি AI সিস্টেম। তুমি যে উত্তরগুলো পাচ্ছ সেগুলো একটি ল্যাঙ্গুয়েজ মডেল তৈরি করে, কোনো মানুষ নয়। উত্তরগুলো ভুল, পক্ষপাতদুষ্ট বা পরস্পরবিরোধী হতে পারে। এগুলো চিকিৎসা, আইনি, আর্থিক বা মানসিক স্বাস্থ্য পরামর্শ নয়। সংকটে থাকলে তোমার স্থানীয় জরুরি পরিষেবা অথবা Safety পেজে দেওয়া হেল্পলাইনে যোগাযোগ করো।",
-  "ai_disclosure.detail_link": "সম্পূর্ণ AI ডিসক্লোজার পড়ো",
-  "ai_disclosure.acknowledge": "বুঝেছি",
-  "cookie_banner.body": "Quarrel শুধু সাইন-ইন করতে, ফর্ম সুরক্ষিত রাখতে আর তোমার ভাষা মনে রাখতে দরকারি কুকি ব্যবহার করে। অ্যানালিটিক্স কুকি-মুক্ত।",
-  "cookie_banner.policy_link": "কুকি পলিসি",
-  "cookie_banner.acknowledge": "ঠিক আছে",
-  "push.daily_roast.title": "{persona_name}-এর কিছু বলার আছে।",
-  "push.daily_roast.body": "{roast_preview}",
-  "push.contradiction.title": "তুমি নিজেই নিজের কথা কাটলে।",
-  "push.contradiction.body": "{summary}",
-  "push.couples_invite.title": "{partner_name} তোমার সাথে স্বাস্থ্যকরভাবে তর্ক করতে চায়।",
-  "push.couples_invite.body": "Quarrel কাপলস লিঙ্ক গ্রহণ করতে ট্যাপ করো।",
-  "push.wager_checkin.title": "কাজটা করেছ?",
-  "push.wager_checkin.body": "{wager_goal} — এখনই চেক-ইন করো, না হলে ${stake} হারাবে।",
-  "push.wager_failed.title": "হেরে গেলে। ${stake} যাচ্ছে {anti_charity}-এ।",
-  "push.wager_failed.body": "রসিদ দেখতে অ্যাপ খোলো।",
-  "push.mirror_ready.title": "তোমার Mirror Report তৈরি।",
-  "push.mirror_ready.body": "মিষ্টি কিছু নেই।",
-  "push.eulogy_ready.title": "তোমার Q{quarter}-এর শোকগাথা তৈরি।",
-  "push.eulogy_ready.body": "সৎ হওয়ার জন্য প্রস্তুত হলে খোলো।",
-  "push.streak_punish.title": "অলসতার {days_missed} দিন।",
-  "push.streak_punish.body": "{drill_sergeant_message}"
+  "ai_disclosure": {
+    "acknowledge": "বুঝেছি",
+    "body": "Quarrel একটি AI সিস্টেম। তুমি যে উত্তরগুলো পাচ্ছ সেগুলো একটি ল্যাঙ্গুয়েজ মডেল তৈরি করে, কোনো মানুষ নয়। উত্তরগুলো ভুল, পক্ষপাতদুষ্ট বা পরস্পরবিরোধী হতে পারে। এগুলো চিকিৎসা, আইনি, আর্থিক বা মানসিক স্বাস্থ্য পরামর্শ নয়। সংকটে থাকলে তোমার স্থানীয় জরুরি পরিষেবা অথবা Safety পেজে দেওয়া হেল্পলাইনে যোগাযোগ করো।",
+    "detail_link": "সম্পূর্ণ AI ডিসক্লোজার পড়ো",
+    "title": "তুমি একটি AI-এর সাথে কথা বলছ।"
+  },
+  "app": {
+    "name": "Quarrel",
+    "tagline": "যে AI তোমাকে নিজের সাথে মিথ্যা বলতে দেবে না।"
+  },
+  "cookie_banner": {
+    "acknowledge": "ঠিক আছে",
+    "body": "Quarrel শুধু সাইন-ইন করতে, ফর্ম সুরক্ষিত রাখতে আর তোমার ভাষা মনে রাখতে দরকারি কুকি ব্যবহার করে। অ্যানালিটিক্স কুকি-মুক্ত।",
+    "policy_link": "কুকি পলিসি"
+  },
+  "push": {
+    "contradiction": {
+      "body": "{summary}",
+      "title": "তুমি নিজেই নিজের কথা কাটলে।"
+    },
+    "couples_invite": {
+      "body": "Quarrel কাপলস লিঙ্ক গ্রহণ করতে ট্যাপ করো।",
+      "title": "{partner_name} তোমার সাথে স্বাস্থ্যকরভাবে তর্ক করতে চায়।"
+    },
+    "daily_roast": {
+      "body": "{roast_preview}",
+      "title": "{persona_name}-এর কিছু বলার আছে।"
+    },
+    "eulogy_ready": {
+      "body": "সৎ হওয়ার জন্য প্রস্তুত হলে খোলো।",
+      "title": "তোমার Q{quarter}-এর শোকগাথা তৈরি।"
+    },
+    "mirror_ready": {
+      "body": "মিষ্টি কিছু নেই।",
+      "title": "তোমার Mirror Report তৈরি।"
+    },
+    "streak_punish": {
+      "body": "{drill_sergeant_message}",
+      "title": "অলসতার {days_missed} দিন।"
+    },
+    "wager_checkin": {
+      "body": "{wager_goal} — এখনই চেক-ইন করো, না হলে ${stake} হারাবে।",
+      "title": "কাজটা করেছ?"
+    },
+    "wager_failed": {
+      "body": "রসিদ দেখতে অ্যাপ খোলো।",
+      "title": "হেরে গেলে। ${stake} যাচ্ছে {anti_charity}-এ।"
+    }
+  }
 }

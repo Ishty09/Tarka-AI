@@ -1,27 +1,51 @@
 {
-  "app.name": "Quarrel",
-  "app.tagline": "A IA que não vai te deixar mentir para si mesmo.",
-  "ai_disclosure.title": "Você está falando com uma IA.",
-  "ai_disclosure.body": "Quarrel é um sistema de IA. As respostas que você recebe são geradas por um modelo de linguagem, não escritas por uma pessoa. Podem ser incorretas, enviesadas ou contraditórias. Não são aconselhamento médico, jurídico, financeiro ou de saúde mental. Se você está em crise, contate os serviços de emergência locais ou uma das linhas de apoio na seção Safety.",
-  "ai_disclosure.detail_link": "Leia a Divulgação de IA completa",
-  "ai_disclosure.acknowledge": "Entendi",
-  "cookie_banner.body": "Quarrel usa só os cookies necessários para entrar, proteger formulários e lembrar do seu idioma. As analíticas são sem cookies.",
-  "cookie_banner.policy_link": "Política de cookies",
-  "cookie_banner.acknowledge": "Entendi",
-  "push.daily_roast.title": "{persona_name} tem uma palavrinha.",
-  "push.daily_roast.body": "{roast_preview}",
-  "push.contradiction.title": "Você se contradisse.",
-  "push.contradiction.body": "{summary}",
-  "push.couples_invite.title": "{partner_name} quer discutir com você (saudavelmente).",
-  "push.couples_invite.body": "Toque para aceitar o vínculo de casal do Quarrel.",
-  "push.wager_checkin.title": "Você fez a coisa?",
-  "push.wager_checkin.body": "{wager_goal} — confirme agora ou perde ${stake}.",
-  "push.wager_failed.title": "Você perdeu. ${stake} indo para {anti_charity}.",
-  "push.wager_failed.body": "Abra o app para ver o recibo.",
-  "push.mirror_ready.title": "Seu Mirror Report está pronto.",
-  "push.mirror_ready.body": "Não é elogio.",
-  "push.eulogy_ready.title": "Seu elogio fúnebre do Q{quarter} está pronto.",
-  "push.eulogy_ready.body": "Abra quando estiver pronto para ser honesto.",
-  "push.streak_punish.title": "Dia {days_missed} de enrolação.",
-  "push.streak_punish.body": "{drill_sergeant_message}"
+  "ai_disclosure": {
+    "acknowledge": "Entendi",
+    "body": "Quarrel é um sistema de IA. As respostas que você recebe são geradas por um modelo de linguagem, não escritas por uma pessoa. Podem ser incorretas, enviesadas ou contraditórias. Não são aconselhamento médico, jurídico, financeiro ou de saúde mental. Se você está em crise, contate os serviços de emergência locais ou uma das linhas de apoio na seção Safety.",
+    "detail_link": "Leia a Divulgação de IA completa",
+    "title": "Você está falando com uma IA."
+  },
+  "app": {
+    "name": "Quarrel",
+    "tagline": "A IA que não vai te deixar mentir para si mesmo."
+  },
+  "cookie_banner": {
+    "acknowledge": "Entendi",
+    "body": "Quarrel usa só os cookies necessários para entrar, proteger formulários e lembrar do seu idioma. As analíticas são sem cookies.",
+    "policy_link": "Política de cookies"
+  },
+  "push": {
+    "contradiction": {
+      "body": "{summary}",
+      "title": "Você se contradisse."
+    },
+    "couples_invite": {
+      "body": "Toque para aceitar o vínculo de casal do Quarrel.",
+      "title": "{partner_name} quer discutir com você (saudavelmente)."
+    },
+    "daily_roast": {
+      "body": "{roast_preview}",
+      "title": "{persona_name} tem uma palavrinha."
+    },
+    "eulogy_ready": {
+      "body": "Abra quando estiver pronto para ser honesto.",
+      "title": "Seu elogio fúnebre do Q{quarter} está pronto."
+    },
+    "mirror_ready": {
+      "body": "Não é elogio.",
+      "title": "Seu Mirror Report está pronto."
+    },
+    "streak_punish": {
+      "body": "{drill_sergeant_message}",
+      "title": "Dia {days_missed} de enrolação."
+    },
+    "wager_checkin": {
+      "body": "{wager_goal} — confirme agora ou perde ${stake}.",
+      "title": "Você fez a coisa?"
+    },
+    "wager_failed": {
+      "body": "Abra o app para ver o recibo.",
+      "title": "Você perdeu. ${stake} indo para {anti_charity}."
+    }
+  }
 }

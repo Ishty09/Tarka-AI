@@ -1,27 +1,51 @@
 {
-  "app.name": "Quarrel",
-  "app.tagline": "الذكاء الاصطناعي الذي لن يدعك تكذب على نفسك.",
-  "ai_disclosure.title": "أنت تتحدث إلى ذكاء اصطناعي.",
-  "ai_disclosure.body": "Quarrel نظام ذكاء اصطناعي. الردود التي تتلقاها يُولّدها نموذج لغوي ولا يكتبها بشر. قد تكون خاطئة أو متحيزة أو متناقضة. وهي ليست استشارة طبية أو قانونية أو مالية أو متعلقة بالصحة النفسية. إذا كنت في أزمة، فاتصل بخدمات الطوارئ المحلية أو بإحدى خطوط المساعدة المدرجة في صفحة Safety.",
-  "ai_disclosure.detail_link": "اقرأ إفصاح الذكاء الاصطناعي الكامل",
-  "ai_disclosure.acknowledge": "فهمت",
-  "cookie_banner.body": "يستخدم Quarrel فقط ملفات تعريف الارتباط اللازمة لتسجيل الدخول وحماية النماذج وتذكّر لغتك. التحليلات بدون ملفات تعريف ارتباط.",
-  "cookie_banner.policy_link": "سياسة ملفات تعريف الارتباط",
-  "cookie_banner.acknowledge": "حسناً",
-  "push.daily_roast.title": "‏{persona_name} عندها رأي.",
-  "push.daily_roast.body": "{roast_preview}",
-  "push.contradiction.title": "ناقضت نفسك.",
-  "push.contradiction.body": "{summary}",
-  "push.couples_invite.title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية).",
-  "push.couples_invite.body": "اضغط لقبول رابط الأزواج في Quarrel.",
-  "push.wager_checkin.title": "هل فعلتها؟",
-  "push.wager_checkin.body": "{wager_goal} — سجّل الآن أو تخسر ‏${stake}.",
-  "push.wager_failed.title": "خسرت. ‏${stake} ذاهبة إلى {anti_charity}.",
-  "push.wager_failed.body": "افتح التطبيق لرؤية الإيصال.",
-  "push.mirror_ready.title": "تقرير المرآة جاهز.",
-  "push.mirror_ready.body": "إنه غير مُجامل.",
-  "push.eulogy_ready.title": "‏تأبين الربع {quarter} جاهز.",
-  "push.eulogy_ready.body": "افتحه عندما تكون مستعداً للصدق.",
-  "push.streak_punish.title": "اليوم {days_missed} من التقاعس.",
-  "push.streak_punish.body": "{drill_sergeant_message}"
+  "ai_disclosure": {
+    "acknowledge": "فهمت",
+    "body": "Quarrel نظام ذكاء اصطناعي. الردود التي تتلقاها يُولّدها نموذج لغوي ولا يكتبها بشر. قد تكون خاطئة أو متحيزة أو متناقضة. وهي ليست استشارة طبية أو قانونية أو مالية أو متعلقة بالصحة النفسية. إذا كنت في أزمة، فاتصل بخدمات الطوارئ المحلية أو بإحدى خطوط المساعدة المدرجة في صفحة Safety.",
+    "detail_link": "اقرأ إفصاح الذكاء الاصطناعي الكامل",
+    "title": "أنت تتحدث إلى ذكاء اصطناعي."
+  },
+  "app": {
+    "name": "Quarrel",
+    "tagline": "الذكاء الاصطناعي الذي لن يدعك تكذب على نفسك."
+  },
+  "cookie_banner": {
+    "acknowledge": "حسناً",
+    "body": "يستخدم Quarrel فقط ملفات تعريف الارتباط اللازمة لتسجيل الدخول وحماية النماذج وتذكّر لغتك. التحليلات بدون ملفات تعريف ارتباط.",
+    "policy_link": "سياسة ملفات تعريف الارتباط"
+  },
+  "push": {
+    "contradiction": {
+      "body": "{summary}",
+      "title": "ناقضت نفسك."
+    },
+    "couples_invite": {
+      "body": "اضغط لقبول رابط الأزواج في Quarrel.",
+      "title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية)."
+    },
+    "daily_roast": {
+      "body": "{roast_preview}",
+      "title": "‏{persona_name} عندها رأي."
+    },
+    "eulogy_ready": {
+      "body": "افتحه عندما تكون مستعداً للصدق.",
+      "title": "‏تأبين الربع {quarter} جاهز."
+    },
+    "mirror_ready": {
+      "body": "إنه غير مُجامل.",
+      "title": "تقرير المرآة جاهز."
+    },
+    "streak_punish": {
+      "body": "{drill_sergeant_message}",
+      "title": "اليوم {days_missed} من التقاعس."
+    },
+    "wager_checkin": {
+      "body": "{wager_goal} — سجّل الآن أو تخسر ‏${stake}.",
+      "title": "هل فعلتها؟"
+    },
+    "wager_failed": {
+      "body": "افتح التطبيق لرؤية الإيصال.",
+      "title": "خسرت. ‏${stake} ذاهبة إلى {anti_charity}."
+    }
+  }
 }
