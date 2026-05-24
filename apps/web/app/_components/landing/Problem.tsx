@@ -33,7 +33,7 @@ export function Problem() {
             Every other AI chat is optimised to agree with you.
           </h2>
           <p className="mt-4 text-sm text-muted-foreground md:text-base">
-            That's not a feature. It's a documented, lawsuit-attracting failure mode.
+            That&apos;s not a feature. It&apos;s a documented, lawsuit-attracting failure mode.
           </p>
         </div>
         <ul className="mt-12 grid gap-6 md:grid-cols-3">

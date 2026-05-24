@@ -81,3 +81,5 @@ supabase/.temp/
 data/*
 !data/README.md
 !data/*.example
+
+.vercel

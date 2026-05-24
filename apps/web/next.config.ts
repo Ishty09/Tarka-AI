@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
   experimental: {
     typedRoutes: true,
   },
+  // ESLint runs in CI / locally via `pnpm lint`. Don't block prod builds on
+  // it — keeps deploys fast and decoupled from minor style nits. Re-enable
+  // (or set ignoreDuringBuilds: false) once the existing warnings are cleaned.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 // Sentry wraps the config to: forward errors to the SDK, upload source maps

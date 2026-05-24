@@ -41,7 +41,7 @@ export default async function PersonaPage({ searchParams }: PageProps) {
   if (categories.length > 0) query = query.in("category", categories);
 
   const { data: localePersonas } = await query.eq("locale", locale);
-  let personas = localePersonas ?? [];
+  const personas = [...(localePersonas ?? [])];
 
   if (personas.length < 6) {
     const { data: fallback } = await query;
