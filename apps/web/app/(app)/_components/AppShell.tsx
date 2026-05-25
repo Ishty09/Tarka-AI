@@ -26,13 +26,13 @@ export function AppShell({ conversations, username, tier, children }: Props) {
         onClose={() => setSidebarOpen(false)}
       />
       <div className="flex flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/80 px-4 py-2 backdrop-blur-md">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-background/80 px-3 py-2 backdrop-blur-md md:px-4">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open sidebar"
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent md:hidden"
+              className="-ml-1 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent md:hidden"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
                 <line x1="3" y1="6" x2="21" y2="6" />

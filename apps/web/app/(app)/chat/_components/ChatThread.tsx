@@ -203,7 +203,7 @@ export function ChatThread({
       </div>
 
       {/* Composer */}
-      <div className="border-t bg-background">
+      <div className="border-t bg-background pb-safe">
         <div className="mx-auto w-full max-w-2xl px-3 pt-3">
           {/* Mode quick-switcher always visible. On /chat/new it's local
               state (controls what mode the next conversation gets). On
@@ -211,7 +211,7 @@ export function ChatThread({
               can't change mid-thread — clicking jumps to the persona
               library filtered by that mode, so picking a persona starts
               a fresh conversation in the chosen mode. */}
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <div className="scrollbar-none mb-2 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap text-xs md:flex-wrap md:whitespace-normal">
             {MODES.map((m) => {
               const active = mode === m.value;
               const node = (
@@ -302,7 +302,7 @@ export function ChatThread({
               type="submit"
               disabled={pending || !input.trim() || !!quotaExceeded}
               aria-label="Send"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-50 md:h-9 md:w-9"
             >
               {pending ? (
                 <span className="text-xs">·</span>

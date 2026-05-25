@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import Script from "next/script";
@@ -13,6 +13,21 @@ const UMAMI_SCRIPT_URL = process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL;
 export const metadata: Metadata = {
   title: "Quarrel AI",
   description: "The AI that won't let you lie to yourself.",
+};
+
+// Mobile rendering — without explicit width=device-width Safari/Chrome
+// scale the page to ~980px and shrink, making everything tiny. Allow
+// pinch-zoom up to 5× for accessibility. `viewport-fit=cover` lets us
+// pad against the iOS notch / home indicator via env(safe-area-inset-*).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 // RTL locales need dir="rtl" on <html> so layout, scrollbars, and form

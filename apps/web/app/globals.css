@@ -104,3 +104,34 @@
     opacity: 1;
   }
 }
+
+/* ----- Mobile UX defaults --------------------------------------------- */
+
+/* iOS Safari zooms into <input> / <textarea> / <select> when their
+   font-size is < 16px. Override to suppress the zoom regardless of
+   Tailwind's text-sm utility. Desktop keeps the smaller appearance
+   via line-height; mobile gets the 16px floor it needs. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Reserve room for the iOS home indicator on bottom-anchored UI
+   (chat composer, cookie banner). Targets that need it opt in by
+   adding `pb-safe` to a parent. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Hide the scrollbar on horizontally scrolling pill rows (couples
+   banner, mode pills). Content still scrolls, just no track shown. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

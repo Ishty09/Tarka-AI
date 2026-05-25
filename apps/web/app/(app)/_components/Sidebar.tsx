@@ -82,7 +82,7 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r bg-card transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[85vw] max-w-xs flex-col border-r bg-card pb-safe transition-transform md:sticky md:top-0 md:h-screen md:w-72 md:max-w-none md:translate-x-0 md:pb-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -96,7 +96,7 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close sidebar"
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent md:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent md:hidden"
           >
             ✕
           </button>
@@ -189,7 +189,7 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
                           <Link
                             href={href}
                             onClick={onClose}
-                            className={`group relative flex items-start gap-2 rounded-md px-2 py-2 text-xs transition ${
+                            className={`group relative flex min-h-11 items-start gap-2 rounded-md px-2 py-2.5 text-xs transition md:min-h-0 md:py-2 ${
                               active
                                 ? "bg-accent text-accent-foreground"
                                 : "text-foreground/80 hover:bg-accent/60 hover:text-accent-foreground"
@@ -235,7 +235,7 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
                   <Link
                     href={n.href}
                     onClick={onClose}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition ${
+                    className={`flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 text-xs transition md:min-h-0 ${
                       active
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground"
