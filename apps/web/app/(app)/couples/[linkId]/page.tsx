@@ -164,6 +164,12 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
           >
             📊 Health check-in
           </Link>
+          <Link
+            href={`/couples/${link.id}/reports`}
+            className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline dark:text-blue-300"
+          >
+            📰 Weekly reports
+          </Link>
         </div>
         <CrossFactConsent
           linkId={link.id}

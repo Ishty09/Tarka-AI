@@ -29,6 +29,7 @@ from app.jobs.eulogy_generator import run_previous_quarter
 from app.jobs.mirror_mode_generator import WINDOW_DAYS, run_weekly_window
 from app.jobs.wager_evaluator import run_today as run_wager_eval_today
 from app.services.contradictions import run_batch
+from app.services.couples_report import run_weekly as run_couples_report_weekly
 from app.services.daily_roast import DEFAULT_WINDOW_MINUTES
 from app.services.daily_roast import run_window as run_daily_roast_window
 from app.services.drill_sergeant import run_today as run_drill_sergeant_today
@@ -414,4 +415,37 @@ async def beta_invites(req: BetaInvitesRequest) -> BetaInvitesResponse:
         queued=result.get("queued", 0),
         sent=result.get("sent", 0),
         failed=result.get("failed", 0),
+    )
+
+
+# ----- Couples weekly report (§9.3.x Week 3) ---------------------------------
+
+
+class CouplesReportResponse(BaseModel):
+    period_start: str
+    period_end: str
+    eligible_couples: int
+    inserted: int
+    skipped: int
+
+
+@router.post(
+    "/couples-report",
+    response_model=CouplesReportResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def couples_report() -> CouplesReportResponse:
+    """Generate weekly couples reports for the trailing 7 days.
+
+    Idempotent per (couple_link_id, period_start). Safe to retry — already-
+    generated couples skip. Couples with no activity also skip.
+    """
+
+    result = await run_couples_report_weekly()
+    return CouplesReportResponse(
+        period_start=result.period_start.isoformat(),
+        period_end=result.period_end.isoformat(),
+        eligible_couples=result.eligible,
+        inserted=result.inserted,
+        skipped=result.skipped,
     )
