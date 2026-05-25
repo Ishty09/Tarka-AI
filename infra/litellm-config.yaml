@@ -1,0 +1,53 @@
+# LiteLLM proxy config — CLAUDE.md §7.1
+# Mount into the container at /app/config.yaml and start with
+# `--config /app/config.yaml`. With STORE_MODEL_IN_DB=true LiteLLM
+# merges these entries with anything added via the admin API.
+#
+# `os.environ/VAR` references the container's env file
+# (/etc/quarrel/litellm.env via --env-file). Always works in YAML;
+# does NOT work when added via /model/new POST API (use literal
+# key value there instead).
+
+model_list:
+  - model_name: quarrel-argue
+    litellm_params:
+      model: openai/gpt-5
+      api_key: os.environ/OPENAI_API_KEY
+      temperature: 0.7
+  - model_name: quarrel-argue
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: quarrel-cheap
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: quarrel-cheap
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: quarrel-embed
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+litellm_settings:
+  num_retries: 2
+  request_timeout: 60
+  drop_params: true
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+
+router_settings:
+  fallbacks:
+    - quarrel-argue: ["quarrel-cheap"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
