@@ -39,15 +39,29 @@ cur = conn.cursor()
 print(f"Connected.\n")
 
 if reset:
+    # `drop schema public cascade; create schema public;` is destructive
+    # in a Supabase project: it also wipes the ALTER DEFAULT PRIVILEGES
+    # that Supabase sets so authenticated/anon can reach tables. We
+    # restore those defaults inline so the schema looks identical to
+    # what a fresh Supabase project would have, regardless of whether
+    # the grants migration (20260525120300) runs.
     print("Resetting public schema…")
     try:
         cur.execute(
             "drop schema if exists public cascade; "
             "create schema public; "
-            "grant all on schema public to postgres, anon, authenticated, service_role;"
+            "grant usage on schema public to anon, authenticated, service_role; "
+            "alter default privileges in schema public "
+            "  grant select, insert, update, delete on tables to anon, authenticated; "
+            "alter default privileges in schema public "
+            "  grant all on tables to service_role; "
+            "alter default privileges in schema public "
+            "  grant usage, select on sequences to anon, authenticated, service_role; "
+            "alter default privileges in schema public "
+            "  grant execute on functions to anon, authenticated, service_role;"
         )
         conn.commit()
-        print("  reset ok\n")
+        print("  reset ok (default privileges restored)\n")
     except Exception as err:
         conn.rollback()
         print(f"  reset FAILED\n  {err!r}")
