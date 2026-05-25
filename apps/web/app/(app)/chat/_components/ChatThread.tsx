@@ -181,14 +181,6 @@ export function ChatThread({
           {messages.map((m) => (
             <MessageBubble key={m.id} turn={m} personaName={personaName} />
           ))}
-          {pending && (
-            <div className="flex items-start gap-3">
-              <Avatar label={personaName} />
-              <div className="flex h-9 items-center gap-1 rounded-2xl border border-input bg-background px-4">
-                <Dot delay="0ms" /> <Dot delay="150ms" /> <Dot delay="300ms" />
-              </div>
-            </div>
-          )}
           {quotaExceeded && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
               You hit your {quotaExceeded.tier} tier limit ({quotaExceeded.used}/
@@ -392,7 +384,14 @@ function MessageBubble({ turn, personaName }: { turn: ChatTurn; personaName: str
           }`}
         >
           {turn.content || (
-            <span className="text-muted-foreground">...</span>
+            // Empty assistant turn = streaming hasn't sent first delta yet.
+            // Show three pulsing dots INSIDE the bubble so it doubles as
+            // the typing indicator. No second bubble outside.
+            <span className="inline-flex items-center gap-1 py-0.5">
+              <Dot delay="0ms" />
+              <Dot delay="150ms" />
+              <Dot delay="300ms" />
+            </span>
           )}
         </div>
         {!isUser && turn.content.length > 0 && (
