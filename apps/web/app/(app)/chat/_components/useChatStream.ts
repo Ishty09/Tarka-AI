@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@/lib/analytics/client";
 
 // Custom streaming hook for the worker's SSE protocol.
@@ -182,6 +182,18 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const stop = useCallback(() => {
     abortRef.current?.abort();
     setPending(false);
+  }, []);
+
+  // Abort any in-flight stream when the component unmounts. Without
+  // this the fetch keeps running silently if the user navigates away
+  // mid-response — wastes their LLM quota + holds an open SSE
+  // connection on the worker. We also clear the ref so the cleanup
+  // is a no-op on re-mount.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
   }, []);
 
   /**

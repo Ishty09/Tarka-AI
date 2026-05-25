@@ -270,7 +270,11 @@ async def chat_stream(
         user_id,
         fact_ids=fact_ids,
     )
-    history = await _load_history(supabase, conversation_id=conversation["id"], limit=20)
+    # Trim history aggressively — user_facts already injected via
+    # _build_system_blocks carries long-term memory cheaply. Last 10
+    # raw turns is enough recency; older context is in facts. Cuts
+    # per-turn input tokens ~50%, big LLM cost win at scale.
+    history = await _load_history(supabase, conversation_id=conversation["id"], limit=10)
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_blocks}, *history]
 

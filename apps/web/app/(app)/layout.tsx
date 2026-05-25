@@ -28,49 +28,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!profile?.onboarding_completed_at) redirect("/onboarding");
 
+  // Sidebar uses the get_sidebar_conversations RPC instead of two
+  // queries (conversations + a full message scan). The RPC returns
+  // one row per conversation with the first user message excerpt
+  // baked in via a substring(..for 200) so we avoid pulling raw
+  // chat content into the layout fetch on every navigation.
+  type SidebarRpcRow = {
+    id: string;
+    title: string | null;
+    mode: string;
+    updated_at: string;
+    archived: boolean;
+    persona_name: string | null;
+    first_user_message: string | null;
+  };
+
   const [acknowledged, locale, convRes] = await Promise.all([
     hasAcknowledgedAiDisclosure(),
     getLocale(),
-    supabase
-      .from("conversations")
-      .select("id, title, mode, updated_at, archived, persona:personas(name)")
-      .eq("user_id", user.id)
-      .eq("archived", false)
-      .order("updated_at", { ascending: false })
-      .limit(80),
+    supabase.rpc("get_sidebar_conversations", {
+      p_user_id: user.id,
+      p_limit: 30,
+    }),
   ]);
 
-  // Title generation is async (CLAUDE.md §7.2 — runs via `quarrel-cheap`
-  // after the first assistant turn). Until it lands, use the first user
-  // message as the visible label so each conversation is distinguishable.
-  const convIds = (convRes.data ?? []).map((c) => c.id);
-  const firstMessages = new Map<string, string>();
-  if (convIds.length > 0) {
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("conversation_id, content")
-      .in("conversation_id", convIds)
-      .eq("role", "user")
-      .order("created_at", { ascending: true });
-    for (const m of msgs ?? []) {
-      if (!firstMessages.has(m.conversation_id)) {
-        firstMessages.set(m.conversation_id, m.content);
-      }
-    }
-  }
-
-  const conversations: ConversationSummary[] = (convRes.data ?? []).map((c) => {
-    const persona = Array.isArray(c.persona) ? c.persona[0] : c.persona;
-    const firstMsg = firstMessages.get(c.id);
-    return {
-      id: c.id,
-      title: c.title ?? firstMsg ?? null,
-      mode: c.mode,
-      updated_at: c.updated_at,
-      archived: c.archived,
-      persona_name: persona?.name ?? null,
-    };
-  });
+  const rows = (convRes.data ?? []) as SidebarRpcRow[];
+  const conversations: ConversationSummary[] = rows.map((c) => ({
+    id: c.id,
+    title: c.title ?? c.first_user_message ?? null,
+    mode: c.mode,
+    updated_at: c.updated_at,
+    archived: c.archived,
+    persona_name: c.persona_name,
+  }));
 
   return (
     <>
