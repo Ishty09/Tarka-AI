@@ -205,40 +205,58 @@ export function ChatThread({
       {/* Composer */}
       <div className="border-t bg-background">
         <div className="mx-auto w-full max-w-2xl px-3 pt-3">
-          {/* Mode quick-switcher only on /chat/new — once a conversation
-              exists, mode is locked at the DB level. To start a new mode,
-              users click + New Chat in the sidebar. */}
-          {!conversationId && (
-            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-              {MODES.map((m) => {
-                const active = mode === m.value;
+          {/* Mode quick-switcher always visible. On /chat/new it's local
+              state (controls what mode the next conversation gets). On
+              an existing chat — where mode is conversation-level and
+              can't change mid-thread — clicking jumps to the persona
+              library filtered by that mode, so picking a persona starts
+              a fresh conversation in the chosen mode. */}
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+            {MODES.map((m) => {
+              const active = mode === m.value;
+              const node = (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                    active && !conversationId
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  <span aria-hidden>{m.icon}</span>
+                  {m.label}
+                </span>
+              );
+              if (conversationId) {
                 return (
-                  <button
+                  <Link
                     key={m.value}
-                    type="button"
-                    onClick={() => setMode(m.value)}
-                    title={m.hint}
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}
+                    href={`/personas?category=${m.value}`}
+                    title={`Start a new ${m.label.toLowerCase()} chat — pick a persona`}
                   >
-                    <span aria-hidden>{m.icon}</span>
-                    {m.label}
-                  </button>
+                    {node}
+                  </Link>
                 );
-              })}
-              <span className="mx-1 h-3 w-px bg-border" aria-hidden />
-              <Link
-                href="/personas"
-                className="inline-flex items-center gap-1 rounded-full border border-input px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                title="Switch persona"
-              >
-                👤 {personaName}
-              </Link>
-            </div>
-          )}
+              }
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMode(m.value)}
+                  title={m.hint}
+                >
+                  {node}
+                </button>
+              );
+            })}
+            <span className="mx-1 h-3 w-px bg-border" aria-hidden />
+            <Link
+              href="/personas"
+              className="inline-flex items-center gap-1 rounded-full border border-input px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Switch persona"
+            >
+              👤 {personaName}
+            </Link>
+          </div>
 
           {showSlash && (
             <div className="mb-2 overflow-hidden rounded-md border border-input bg-popover shadow-md">

@@ -101,10 +101,12 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
           </button>
         </div>
 
-        {/* New chat CTA */}
+        {/* New chat CTA — lands on the persona library because /chat/new
+            without ?persona has no thread to attach to. The library is
+            the canonical "pick what to fight about" surface. */}
         <div className="border-b px-3 py-3">
           <Link
-            href="/chat/new"
+            href="/personas"
             onClick={onClose}
             className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:opacity-90"
           >
