@@ -151,6 +151,14 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
 
     return (
       <div className="flex flex-col">
+        <div className="border-b bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 px-4 py-2 text-sm">
+          <Link
+            href={`/couples/${link.id}/disputes`}
+            className="inline-flex items-center gap-1 font-medium text-violet-700 hover:underline dark:text-violet-300"
+          >
+            ⚖ Disputes — submit a fight, both sides, get a verdict →
+          </Link>
+        </div>
         <CrossFactConsent
           linkId={link.id}
           yourConsent={yourConsent}

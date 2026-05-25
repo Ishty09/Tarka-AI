@@ -41,6 +41,7 @@ type Filter = (typeof FILTER_OPTIONS)[number];
 const NAV_LINKS = [
   { href: "/chat", label: "Chat", icon: "💬" },
   { href: "/personas", label: "Personas", icon: "👤" },
+  { href: "/couples", label: "Couples", icon: "⚖" },
   { href: "/contradictions", label: "Contradictions", icon: "⚡" },
   { href: "/mirror", label: "Mirror", icon: "🪞" },
   { href: "/wagers", label: "Wagers", icon: "💰" },
