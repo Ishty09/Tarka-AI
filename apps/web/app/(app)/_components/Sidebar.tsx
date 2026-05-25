@@ -180,26 +180,35 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
                       const meta = MODE_META[c.mode] ?? MODE_META.custom;
                       const href = `/chat/${c.id}`;
                       const active = pathname === href;
+                      const label = (c.title?.trim() || `New ${meta.label.toLowerCase()}`).slice(0, 60);
                       return (
                         <li key={c.id}>
                           <Link
                             href={href}
                             onClick={onClose}
-                            className={`group flex items-start gap-2 rounded-md px-2 py-2 text-xs transition ${
+                            className={`group relative flex items-start gap-2 rounded-md px-2 py-2 text-xs transition ${
                               active
                                 ? "bg-accent text-accent-foreground"
-                                : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
+                                : "text-foreground/80 hover:bg-accent/60 hover:text-accent-foreground"
                             }`}
                           >
+                            {active && (
+                              <span
+                                aria-hidden
+                                className={`absolute inset-y-1 left-0 w-0.5 rounded-r-full ${meta.tone.replace("text-", "bg-")}`}
+                              />
+                            )}
                             <span className={`mt-0.5 text-sm leading-none ${meta.tone}`} aria-hidden>
                               {meta.icon}
                             </span>
                             <span className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-                              <span className="truncate text-[13px] font-medium">
-                                {c.title?.trim() || "Untitled"}
+                              <span className="truncate text-[13px] font-medium leading-tight">
+                                {label}
                               </span>
-                              <span className="truncate text-[11px] text-muted-foreground">
-                                {c.persona_name ?? meta.label}
+                              <span className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+                                <span className="truncate">{c.persona_name ?? meta.label}</span>
+                                <span aria-hidden>·</span>
+                                <time>{formatRelative(c.updated_at)}</time>
                               </span>
                             </span>
                           </Link>
@@ -243,6 +252,19 @@ export function Sidebar({ conversations, username, open, onClose }: Props) {
       </aside>
     </>
   );
+}
+
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "now";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d`;
+  if (day < 30) return `${Math.floor(day / 7)}w`;
+  return `${Math.floor(day / 30)}mo`;
 }
 
 // Group conversations into Today / Yesterday / This week / Older.

@@ -102,9 +102,24 @@ def _load_all_messages(root: Path | None = None) -> dict[str, dict[str, str]]:
             locale = path.stem
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                out[locale] = {k: v for k, v in data.items() if isinstance(v, str)}
+                # apps/web/messages now uses nested objects (next-intl
+                # expects dot-keys to traverse). Flatten back to flat
+                # dot-keys here so existing render_push consumers
+                # (`push.daily_roast.title` etc.) work unchanged.
+                out[locale] = _flatten_dict(data)
         except (OSError, json.JSONDecodeError) as err:
             log.warning("push.locale_load_failed", path=str(path), error=str(err))
+    return out
+
+
+def _flatten_dict(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key, value in data.items():
+        full = f"{prefix}{key}"
+        if isinstance(value, dict):
+            out.update(_flatten_dict(value, prefix=f"{full}."))
+        elif isinstance(value, str):
+            out[full] = value
     return out
 
 

@@ -40,11 +40,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .limit(80),
   ]);
 
+  // Title generation is async (CLAUDE.md §7.2 — runs via `quarrel-cheap`
+  // after the first assistant turn). Until it lands, use the first user
+  // message as the visible label so each conversation is distinguishable.
+  const convIds = (convRes.data ?? []).map((c) => c.id);
+  const firstMessages = new Map<string, string>();
+  if (convIds.length > 0) {
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("conversation_id, content")
+      .in("conversation_id", convIds)
+      .eq("role", "user")
+      .order("created_at", { ascending: true });
+    for (const m of msgs ?? []) {
+      if (!firstMessages.has(m.conversation_id)) {
+        firstMessages.set(m.conversation_id, m.content);
+      }
+    }
+  }
+
   const conversations: ConversationSummary[] = (convRes.data ?? []).map((c) => {
     const persona = Array.isArray(c.persona) ? c.persona[0] : c.persona;
+    const firstMsg = firstMessages.get(c.id);
     return {
       id: c.id,
-      title: c.title,
+      title: c.title ?? firstMsg ?? null,
       mode: c.mode,
       updated_at: c.updated_at,
       archived: c.archived,

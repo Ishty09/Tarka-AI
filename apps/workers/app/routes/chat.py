@@ -441,6 +441,16 @@ async def _stream_assistant(
         source_message_id=user_message_id,
     )
 
+    # Fire-and-forget title generation. Same best-effort pattern. The DB
+    # update is gated on title IS NULL, so this is safe to fire on every
+    # turn (no-op once a title exists).
+    _schedule_title_generation(
+        supabase,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        user_message=user_message,
+    )
+
 
 def _schedule_fact_extraction(
     *,
@@ -457,6 +467,27 @@ def _schedule_fact_extraction(
             conversation_id=conversation_id,
             user_message=user_message,
             source_message_id=source_message_id,
+        )
+    )
+
+
+def _schedule_title_generation(
+    supabase: AsyncClient,
+    *,
+    user_id: str,
+    conversation_id: str,
+    user_message: str,
+) -> None:
+    """Spawn the title-gen coroutine. Module-level so tests can monkeypatch."""
+
+    from app.services.title import maybe_generate_title
+
+    asyncio.create_task(
+        maybe_generate_title(
+            supabase,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            user_message=user_message,
         )
     )
 
