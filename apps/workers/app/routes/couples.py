@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.services._db_typing import row_or_none
+from app.services.conversation_prep import PrepError, generate_prep
 from app.services.dispute_arbitrator import ArbitrationError, arbitrate
 from app.services.supabase_client import get_supabase
 
@@ -142,3 +143,81 @@ async def arbitrate_dispute(
     return ArbitrateResponse(
         ok=True, status="arbitrated", verdict=result.verdict
     )
+
+
+# ----- Pre-conversation coaching (§9.3.x Week 5) -----------------------------
+
+
+class GeneratePrepResponse(BaseModel):
+    ok: bool
+    status: str
+    prep: dict[str, Any] | None = None
+    error: str | None = None
+
+
+@router.post(
+    "/preps/{prep_id}/generate",
+    response_model=GeneratePrepResponse,
+    dependencies=[Depends(_verify_internal_caller)],
+)
+async def generate_conversation_prep(
+    prep_id: str = Path(..., min_length=36, max_length=36),
+) -> GeneratePrepResponse:
+    supabase = await get_supabase()
+
+    row = row_or_none(
+        await (
+            supabase.table("couple_conversation_preps")
+            .select(
+                "id, couple_link_id, user_id, topic, desired_outcome, context, status, prep"
+            )
+            .eq("id", prep_id)
+            .single()
+            .execute()
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "prep not found")
+
+    if row.get("prep") and row["status"] == "ready":
+        return GeneratePrepResponse(ok=True, status="ready", prep=row["prep"])
+
+    await (
+        supabase.table("couple_conversation_preps")
+        .update({"status": "generating"})
+        .eq("id", prep_id)
+        .execute()
+    )
+
+    try:
+        result = await generate_prep(
+            user_id=row["user_id"],
+            couple_link_id=row["couple_link_id"],
+            topic=row["topic"],
+            desired_outcome=row.get("desired_outcome"),
+            context=row.get("context"),
+        )
+    except PrepError as err:
+        log.warning("conversation_prep.failed", prep_id=prep_id, error=str(err))
+        await (
+            supabase.table("couple_conversation_preps")
+            .update({"status": "failed"})
+            .eq("id", prep_id)
+            .execute()
+        )
+        return GeneratePrepResponse(ok=False, status="failed", error=str(err))
+
+    await (
+        supabase.table("couple_conversation_preps")
+        .update(
+            {
+                "status": "ready",
+                "prep": result.prep,
+                "generated_at": "now()",
+                "generation_model": result.model,
+            }
+        )
+        .eq("id", prep_id)
+        .execute()
+    )
+    return GeneratePrepResponse(ok=True, status="ready", prep=result.prep)
