@@ -1,19 +1,19 @@
 import { getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hasAcknowledgedAiDisclosure } from "@/lib/eu-ai-act";
+import { AppShell } from "./_components/AppShell";
 import { EuAiActModal } from "./_components/EuAiActModal";
+import type { ConversationSummary } from "./_components/Sidebar";
 
-// Shared chrome for every (app)/* page. Auth is enforced upstream by
-// middleware.ts; this layout adds a small nav strip so signed-in users see
-// who they are and can sign out. Onboarding-incomplete users are bounced
-// here — their profile row exists but onboarding_completed_at is null, so
-// any (app) hit redirects to /onboarding to finish setup.
+// Shared chrome for every (app)/* page. Auth + onboarding gate up top,
+// then renders the sidebar shell. The sidebar lists the user's recent
+// conversations so jumping between chats is one click, not a trip back
+// through /chat. Mobile uses a drawer; desktop keeps the sidebar pinned.
 //
-// EU AI Act Article 50 first-run modal mounts here so the disclosure shows
-// on every authenticated entry point — chat, tools, personas, etc. — until
-// the visitor acknowledges it for this device (§27 step 55).
+// EU AI Act Article 50 first-run modal mounts here so the disclosure
+// shows on every authenticated entry point until acknowledged (§27 step
+// 55).
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabase();
@@ -28,41 +28,40 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!profile?.onboarding_completed_at) redirect("/onboarding");
 
-  const [acknowledged, locale] = await Promise.all([
+  const [acknowledged, locale, convRes] = await Promise.all([
     hasAcknowledgedAiDisclosure(),
     getLocale(),
+    supabase
+      .from("conversations")
+      .select("id, title, mode, updated_at, archived, persona:personas(name)")
+      .eq("user_id", user.id)
+      .eq("archived", false)
+      .order("updated_at", { ascending: false })
+      .limit(80),
   ]);
 
+  const conversations: ConversationSummary[] = (convRes.data ?? []).map((c) => {
+    const persona = Array.isArray(c.persona) ? c.persona[0] : c.persona;
+    return {
+      id: c.id,
+      title: c.title,
+      mode: c.mode,
+      updated_at: c.updated_at,
+      archived: c.archived,
+      persona_name: persona?.name ?? null,
+    };
+  });
+
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-4">
-          <Link href="/chat" className="font-semibold tracking-tight">Quarrel</Link>
-          <nav className="hidden gap-3 text-sm text-muted-foreground md:flex">
-            <Link href="/chat" className="hover:text-foreground">Chat</Link>
-            <Link href="/personas" className="hover:text-foreground">Personas</Link>
-            <Link href="/contradictions" className="hover:text-foreground">Contradictions</Link>
-            <Link href="/wagers" className="hover:text-foreground">Wagers</Link>
-            <Link href="/settings" className="hover:text-foreground">Settings</Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-muted-foreground">@{profile.username}</span>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs uppercase tracking-wide">
-            {profile.tier}
-          </span>
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-      <div className="flex-1">{children}</div>
+    <>
+      <AppShell
+        conversations={conversations}
+        username={profile.username}
+        tier={profile.tier}
+      >
+        {children}
+      </AppShell>
       <EuAiActModal show={!acknowledged} locale={locale} />
-    </div>
+    </>
   );
 }

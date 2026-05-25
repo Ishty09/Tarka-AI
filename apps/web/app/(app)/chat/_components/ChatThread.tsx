@@ -205,36 +205,40 @@ export function ChatThread({
       {/* Composer */}
       <div className="border-t bg-background">
         <div className="mx-auto w-full max-w-2xl px-3 pt-3">
-          {/* Mode quick-switcher + persona link */}
-          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-            {MODES.map((m) => {
-              const active = mode === m.value;
-              return (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => setMode(m.value)}
-                  title={m.hint}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  <span aria-hidden>{m.icon}</span>
-                  {m.label}
-                </button>
-              );
-            })}
-            <span className="mx-1 h-3 w-px bg-border" aria-hidden />
-            <Link
-              href="/personas"
-              className="inline-flex items-center gap-1 rounded-full border border-input px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="Switch persona"
-            >
-              👤 {personaName}
-            </Link>
-          </div>
+          {/* Mode quick-switcher only on /chat/new — once a conversation
+              exists, mode is locked at the DB level. To start a new mode,
+              users click + New Chat in the sidebar. */}
+          {!conversationId && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+              {MODES.map((m) => {
+                const active = mode === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setMode(m.value)}
+                    title={m.hint}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "border border-input bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}
+                  >
+                    <span aria-hidden>{m.icon}</span>
+                    {m.label}
+                  </button>
+                );
+              })}
+              <span className="mx-1 h-3 w-px bg-border" aria-hidden />
+              <Link
+                href="/personas"
+                className="inline-flex items-center gap-1 rounded-full border border-input px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                title="Switch persona"
+              >
+                👤 {personaName}
+              </Link>
+            </div>
+          )}
 
           {showSlash && (
             <div className="mb-2 overflow-hidden rounded-md border border-input bg-popover shadow-md">

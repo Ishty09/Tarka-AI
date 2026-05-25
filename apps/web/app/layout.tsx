@@ -4,6 +4,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import Script from "next/script";
 import { hasAcknowledgedCookieNotice } from "@/lib/cookie-notice";
 import { CookieBanner } from "./_components/CookieBanner";
+import { ThemeProvider } from "./_components/ThemeProvider";
 import "./globals.css";
 
 const UMAMI_WEBSITE_ID = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
@@ -41,10 +42,12 @@ export default async function RootLayout({
             defer
           />
         ) : null}
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
-          <CookieBanner show={!cookieAcknowledged} locale={locale} />
-        </NextIntlClientProvider>
+        <ThemeProvider>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            {children}
+            <CookieBanner show={!cookieAcknowledged} locale={locale} />
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
