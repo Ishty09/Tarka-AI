@@ -170,6 +170,12 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
           >
             📰 Weekly reports
           </Link>
+          <Link
+            href={`/couples/${link.id}/issues`}
+            className="inline-flex items-center gap-1 font-medium text-amber-700 hover:underline dark:text-amber-300"
+          >
+            🔁 Open issues
+          </Link>
         </div>
         <CrossFactConsent
           linkId={link.id}
