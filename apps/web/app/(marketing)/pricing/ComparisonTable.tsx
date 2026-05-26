@@ -79,6 +79,22 @@ const ROWS: Row[] = (() => {
       },
     },
     {
+      feature: "Couple disputes / month",
+      values: {
+        free: fmt(f.couple_disputes_per_month),
+        pro: fmt(p.couple_disputes_per_month),
+        max: fmt(m.couple_disputes_per_month),
+      },
+    },
+    {
+      feature: "Couple pre-talk preps / month",
+      values: {
+        free: fmt(f.couple_preps_per_month),
+        pro: fmt(p.couple_preps_per_month),
+        max: fmt(m.couple_preps_per_month),
+      },
+    },
+    {
       feature: "Group room seats",
       values: {
         free: f.group_seats_per_room === 0 ? "—" : fmt(f.group_seats_per_room),

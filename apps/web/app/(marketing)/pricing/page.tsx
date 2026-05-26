@@ -73,6 +73,7 @@ export default async function PricingPage({ searchParams }: PageProps) {
             `${TIER_LIMITS.free.messages_per_day} messages/day`,
             `${TIER_LIMITS.free.council_runs.limit}/${TIER_LIMITS.free.council_runs.period} Council runs`,
             `${TIER_LIMITS.free.active_personas} personas`,
+            `${TIER_LIMITS.free.couple_links_active} couple link · ${TIER_LIMITS.free.couple_disputes_per_month} disputes/mo`,
             "Contradictions 30 days",
           ]}
           cta={<Link href="/signup" className="text-center underline">Start free →</Link>}
@@ -86,7 +87,7 @@ export default async function PricingPage({ searchParams }: PageProps) {
             `${TIER_LIMITS.pro.messages_per_day} messages/day`,
             `${TIER_LIMITS.pro.council_runs.limit}/${TIER_LIMITS.pro.council_runs.period} Council runs`,
             `${TIER_LIMITS.pro.active_personas} personas`,
-            `${TIER_LIMITS.pro.couple_links_active} couple link`,
+            `${TIER_LIMITS.pro.couple_links_active} couple link · ${TIER_LIMITS.pro.couple_disputes_per_month} disputes + ${TIER_LIMITS.pro.couple_preps_per_month} preps/mo`,
             "Contradictions 1 year",
             "Mirror Mode weekly",
           ]}
@@ -102,7 +103,7 @@ export default async function PricingPage({ searchParams }: PageProps) {
             `${TIER_LIMITS.max.messages_per_day} messages/day`,
             `${TIER_LIMITS.max.council_runs.limit}/${TIER_LIMITS.max.council_runs.period} Council runs`,
             "Unlimited personas",
-            `${TIER_LIMITS.max.couple_links_active} couple links`,
+            `${TIER_LIMITS.max.couple_links_active} couple links · unlimited disputes + preps`,
             "Contradictions forever",
             "Mirror Mode weekly + on-demand",
             "Eulogy quarterly + on-demand",
