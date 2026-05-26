@@ -4,9 +4,20 @@
 # merges these entries with anything added via the admin API.
 #
 # `os.environ/VAR` references the container's env file
-# (/etc/quarrel/litellm.env via --env-file). Always works in YAML;
-# does NOT work when added via /model/new POST API (use literal
-# key value there instead).
+# (/etc/quarrel/litellm.env via --env-file). Works in YAML; does NOT
+# work via /model/new POST API (use literal key value there).
+#
+# Model routing intent:
+#   quarrel-argue  — chat replies, council, mediator, mirror, eulogy
+#                    → GPT-5 (reasoning) for depth
+#                    Fallback to Sonnet 4.6 if Anthropic key set.
+#   quarrel-cheap  — safety classifier, title gen, fact extraction
+#                    → GPT-4o-mini (NO reasoning, ~0.5s) for speed
+#                    Anthropic Haiku fallback if key set.
+#                    Critical: this runs on every chat turn so latency
+#                    is end-user visible.
+#   quarrel-embed  — pgvector embeddings
+#                    → text-embedding-3-small
 
 model_list:
   - model_name: quarrel-argue
@@ -14,19 +25,11 @@ model_list:
       model: openai/gpt-5
       api_key: os.environ/OPENAI_API_KEY
       temperature: 0.7
-  - model_name: quarrel-argue
-    litellm_params:
-      model: anthropic/claude-sonnet-4-6
-      api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: quarrel-cheap
     litellm_params:
-      model: openai/gpt-5-mini
+      model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
-  - model_name: quarrel-cheap
-    litellm_params:
-      model: anthropic/claude-haiku-4-5
-      api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: quarrel-embed
     litellm_params:
@@ -42,10 +45,6 @@ litellm_settings:
     type: redis
     host: redis
     port: 6379
-
-router_settings:
-  fallbacks:
-    - quarrel-argue: ["quarrel-cheap"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

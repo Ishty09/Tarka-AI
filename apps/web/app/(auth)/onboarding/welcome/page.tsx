@@ -19,10 +19,11 @@ export default function WelcomePage() {
         </a>
         <a
           href="https://chat.openai.com"
-          rel="noreferrer"
-          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium shadow-sm hover:bg-accent"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-muted-foreground shadow-sm hover:bg-accent"
         >
-          I want a yes-man
+          I want a yes-man (opens ChatGPT) ↗
         </a>
         <p className="text-xs text-muted-foreground">
           Picking option two opens ChatGPT. That&apos;s the right tool if you want validation.
