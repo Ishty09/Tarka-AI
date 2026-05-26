@@ -31,6 +31,10 @@
       "body": "Quarrel \"{dispute_title}\" पर दोनों पक्षों को तौल रहा है।",
       "title": "{partner_name} ने आपके विवाद का जवाब दिया।"
     },
+    "couples_issue_stale": {
+      "body": "{theme} — {days_stale} दिनों से छुआ नहीं। अभी भी खुला है।",
+      "title": "ये अभी भी पड़ा है।"
+    },
     "couples_prep_ready": {
       "body": "विषय: {topic}। निजी — पार्टनर नहीं देखेगा।",
       "title": "आपकी बातचीत की तैयारी तैयार है।"

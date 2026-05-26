@@ -31,6 +31,10 @@
       "body": "‏Quarrel يزن الجانبين بشأن \"{dispute_title}\".",
       "title": "‏{partner_name} رد على نزاعك."
     },
+    "couples_issue_stale": {
+      "body": "{theme} — لم يُمسّ منذ {days_stale} يومًا. ما زال مفتوحًا.",
+      "title": "هذا ما زال معلقًا."
+    },
     "couples_prep_ready": {
       "body": "الموضوع: {topic}. خاص — لن يراه شريكك.",
       "title": "تحضير محادثتك جاهز."

@@ -60,6 +60,7 @@ TemplateName = Literal[
     "couples_dispute_arbitrated",
     "couples_report_ready",
     "couples_prep_ready",
+    "couples_issue_stale",
     "data_export_ready",
     "account_deletion_grace_started",
     "emergency_contact_notification",
@@ -413,6 +414,27 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("topic", "prep_url"),
+    ),
+    "couples_issue_stale": Template(
+        name="couples_issue_stale",
+        subject="\"{{ theme }}\" — still open, {{ days_stale }} days untouched",
+        html=_wrap(
+            "<h1 style='margin-top:0'>This one's still sitting.</h1>"
+            "<p><strong>{{ theme }}</strong> hasn't been touched in "
+            "<strong>{{ days_stale }} days</strong>.</p>"
+            "<p>It's not resolved. It's not even on the table. That's how "
+            "small things become forever things.</p>"
+            "<p><a href='{{ issues_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Open the issues tracker</a></p>"
+        ),
+        text=(
+            "'{{ theme }}' hasn't been touched in {{ days_stale }} days.\n\n"
+            "It's still open. Open the tracker: {{ issues_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("theme", "days_stale", "issues_url"),
     ),
     "data_export_ready": Template(
         name="data_export_ready",

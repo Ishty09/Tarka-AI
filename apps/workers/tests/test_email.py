@@ -146,6 +146,11 @@ SAMPLE_VARS: dict[str, dict[str, Any]] = {
         "topic": "asking to move in together",
         "prep_url": "https://quarrel.test/couples/abc/preps/xyz",
     },
+    "couples_issue_stale": {
+        "theme": "money tension after Wednesdays",
+        "days_stale": 18,
+        "issues_url": "https://quarrel.test/couples/abc/issues",
+    },
     "data_export_ready": {
         "download_url": "https://quarrel.test/exports/abc",
         "ttl_hours": 24,

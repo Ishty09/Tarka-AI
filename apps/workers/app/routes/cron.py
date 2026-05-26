@@ -31,6 +31,7 @@ from app.jobs.wager_evaluator import run_today as run_wager_eval_today
 from app.services.contradictions import run_batch
 from app.services.couples_report import run_weekly as run_couples_report_weekly
 from app.services.daily_roast import DEFAULT_WINDOW_MINUTES
+from app.services.issue_nudges import run_nudges as run_issue_nudges
 from app.services.daily_roast import run_window as run_daily_roast_window
 from app.services.drill_sergeant import run_today as run_drill_sergeant_today
 from app.services.eulogy import previous_quarter_window, run_quarter
@@ -447,5 +448,35 @@ async def couples_report() -> CouplesReportResponse:
         period_end=result.period_end.isoformat(),
         eligible_couples=result.eligible,
         inserted=result.inserted,
+        skipped=result.skipped,
+    )
+
+
+# ----- Couples open-issues stale nudge (§9.3.x Week 4 follow-up) -----------
+
+
+class IssueNudgeResponse(BaseModel):
+    eligible_issues: int
+    notified: int
+    skipped: int
+
+
+@router.post(
+    "/couple-issue-nudges",
+    response_model=IssueNudgeResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def couple_issue_nudges() -> IssueNudgeResponse:
+    """Nudge both partners on couple_issues stale for >14 days.
+
+    Idempotent at the issue level via last_nudged_at — once nudged for
+    a stale window, the issue won't fire again unless partners touch
+    it (bumping last_discussed_at) and let it go stale again.
+    """
+
+    result = await run_issue_nudges()
+    return IssueNudgeResponse(
+        eligible_issues=result.eligible,
+        notified=result.notified,
         skipped=result.skipped,
     )

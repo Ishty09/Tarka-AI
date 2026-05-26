@@ -31,6 +31,10 @@
       "body": "Quarrel está pesando os dois lados em \"{dispute_title}\".",
       "title": "{partner_name} respondeu à sua disputa."
     },
+    "couples_issue_stale": {
+      "body": "{theme} — sem mexer há {days_stale} dias. Ainda aberto.",
+      "title": "Esse ainda está aí."
+    },
     "couples_prep_ready": {
       "body": "Tema: {topic}. Privado — seu parceiro não vê isso.",
       "title": "Sua preparação para a conversa está pronta."
