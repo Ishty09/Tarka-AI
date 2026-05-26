@@ -41,6 +41,7 @@ from supabase import AsyncClient
 from app.config import get_settings
 from app.services._db_typing import row_or_none
 from app.services._db_typing import rows as _rows
+from app.services.notification_prefs import PUSH_TEMPLATE_CATEGORY, prefs_allow
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -379,10 +380,19 @@ async def _load_subscriptions(
     return out
 
 
-async def _load_locale(supabase: AsyncClient, *, user_id: str) -> str:
+async def _load_locale(
+    supabase: AsyncClient, *, user_id: str, template: PushTemplate
+) -> str:
+    """Return the user's locale, or "" if push is muted for this template.
+
+    Muting kicks in when:
+    - profiles.notification_push is explicitly False (global toggle), OR
+    - profiles.notification_preferences disables the template's category.
+    """
+
     res = (
         await supabase.table("profiles")
-        .select("locale, notification_push")
+        .select("locale, notification_push, notification_preferences")
         .eq("id", user_id)
         .maybe_single()
         .execute()
@@ -392,6 +402,11 @@ async def _load_locale(supabase: AsyncClient, *, user_id: str) -> str:
         return DEFAULT_LOCALE
     if row.get("notification_push") is False:
         return ""  # caller treats empty as "muted"
+    category = PUSH_TEMPLATE_CATEGORY.get(template)
+    if category is not None and not prefs_allow(
+        row.get("notification_preferences"), channel="push", category=category
+    ):
+        return ""
     locale = row.get("locale")
     return locale if isinstance(locale, str) and locale else DEFAULT_LOCALE
 
@@ -459,7 +474,7 @@ async def deliver_to_user(
         )
         return []
 
-    locale = await _load_locale(sb, user_id=user_id)
+    locale = await _load_locale(sb, user_id=user_id, template=template)
     if locale == "":
         log.info("push.muted", user_id=user_id, template=template)
         return []

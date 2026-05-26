@@ -209,3 +209,69 @@ export const WAGER_MAX_STAKE_CENTS_ABSOLUTE = 100_000;
 
 export const PERSONA_SYSTEM_PROMPT_MAX_CHARS = 2_000;
 export const PERSONA_MARKETPLACE_REVENUE_SHARE = { creator: 0.7, platform: 0.3 } as const;
+
+// ----- Notification categories (§12.2 per-event toggles) --------------------
+//
+// Both apps/web (settings UI) and apps/workers (push.py + email.py) use
+// these. The workers side mirrors the same identifiers in Python; tests
+// assert the two lists match. profiles.notification_preferences is shaped
+// as { [channel]: { [category]: boolean } } where channel is "push" |
+// "email" and category is one of NOTIFICATION_CATEGORIES. A missing key
+// means "allowed"; explicit `false` mutes that channel+category pair.
+
+export const NOTIFICATION_CATEGORIES = [
+  "daily_roast",
+  "contradiction",
+  "couples",
+  "wagers",
+  "mirror_eulogy",
+  "streaks",
+] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export const NOTIFICATION_CHANNELS = ["push", "email"] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+export const NOTIFICATION_CATEGORY_META: Record<
+  NotificationCategory,
+  { label: string; hint: string }
+> = {
+  daily_roast: {
+    label: "Daily Roast",
+    hint: "Your scheduled push + email at your chosen time.",
+  },
+  contradiction: {
+    label: "Contradiction callouts",
+    hint: "When you contradict your past self.",
+  },
+  couples: {
+    label: "Couples",
+    hint: "Disputes, weekly reports, prep generation, stale issues.",
+  },
+  wagers: {
+    label: "Wagers",
+    hint: "Daily check-ins and stake disbursement.",
+  },
+  mirror_eulogy: {
+    label: "Mirror Mode & Eulogy",
+    hint: "Weekly mirror reports and quarterly eulogies.",
+  },
+  streaks: {
+    label: "Drill Sergeant",
+    hint: "Escalating roasts when you miss your streak.",
+  },
+};
+
+export type NotificationPreferences = Partial<
+  Record<NotificationChannel, Partial<Record<NotificationCategory, boolean>>>
+>;
+
+/** Returns false only when prefs explicitly disable that channel+category. */
+export function notificationsAllowed(
+  prefs: NotificationPreferences | null | undefined,
+  channel: NotificationChannel,
+  category: NotificationCategory,
+): boolean {
+  if (!prefs) return true;
+  return prefs[channel]?.[category] !== false;
+}

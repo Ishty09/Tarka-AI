@@ -3,7 +3,12 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { LOCALES, type Locale } from "@quarrel/shared/constants";
+import {
+  LOCALES,
+  NOTIFICATION_CATEGORIES,
+  type Locale,
+  type NotificationPreferences,
+} from "@quarrel/shared/constants";
 import { hashUserId, trackServer } from "@/lib/analytics";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -113,6 +118,19 @@ export async function updateNotifications(
   const time = dailyOn ? (parsed.data.daily_roast_time || null) : null;
   const slug = dailyOn ? (parsed.data.daily_roast_persona_slug || null) : null;
 
+  // Per-category prefs: each pref_<category> checkbox is "on" when allowed
+  // and absent when muted. We store muted categories as { push: false,
+  // email: false } and OMIT enabled ones so the JSON stays small and the
+  // default-allow contract is obvious.
+  const preferences: NotificationPreferences = {};
+  for (const cat of NOTIFICATION_CATEGORIES) {
+    const muted = formData.get(`pref_${cat}`) !== "on";
+    if (muted) {
+      preferences.push = { ...preferences.push, [cat]: false };
+      preferences.email = { ...preferences.email, [cat]: false };
+    }
+  }
+
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -125,6 +143,7 @@ export async function updateNotifications(
       marketing_email_consent: parsed.data.marketing_email_consent,
       daily_roast_time: time,
       daily_roast_persona_slug: slug,
+      notification_preferences: preferences,
     })
     .eq("id", user.id);
   if (error) return { ok: false, error: "Couldn't save notification preferences." };

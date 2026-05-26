@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
+import {
+  type NotificationPreferences,
+} from "@quarrel/shared/constants";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { SettingsSection } from "../_components/SettingsSection";
 import { NotificationsForm } from "./NotificationsForm";
 
-// §12.2 — Notifications. Per-event toggles (contradiction surfaced, couples
-// invite, wager check-in, mirror ready, eulogy ready, marketing) are
-// represented today by the global email/push toggles + marketing consent +
-// Daily Roast on/off; finer-grained per-event toggles arrive with the
-// notification_preferences column (deferred — needs a migration).
+// §12.2 — Notifications. Global push/email toggles act as master
+// overrides; the per-category toggles (notification_preferences) let
+// users mute a topic without losing transactional / security email.
 
 export default async function NotificationsPage() {
   const supabase = await createServerSupabase();
@@ -18,7 +19,7 @@ export default async function NotificationsPage() {
     supabase
       .from("profiles")
       .select(
-        "notification_email, notification_push, marketing_email_consent, daily_roast_time, daily_roast_persona_slug, locale",
+        "notification_email, notification_push, marketing_email_consent, daily_roast_time, daily_roast_persona_slug, locale, notification_preferences",
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -40,6 +41,8 @@ export default async function NotificationsPage() {
   const rest = all.filter((p) => p.locale !== profile.locale);
   const personaOptions = [...preferred, ...rest].map((p) => ({ slug: p.slug, name: p.name }));
 
+  const prefs = (profile.notification_preferences ?? {}) as NotificationPreferences;
+
   return (
     <div className="flex flex-col gap-6">
       <SettingsSection
@@ -53,6 +56,7 @@ export default async function NotificationsPage() {
             marketing_email_consent: profile.marketing_email_consent,
             daily_roast_time: profile.daily_roast_time ?? "",
             daily_roast_persona_slug: profile.daily_roast_persona_slug ?? "",
+            preferences: prefs,
           }}
           personas={personaOptions}
         />

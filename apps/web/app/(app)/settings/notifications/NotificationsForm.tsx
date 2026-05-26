@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import {
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CATEGORY_META,
+  notificationsAllowed,
+  type NotificationCategory,
+  type NotificationPreferences,
+} from "@quarrel/shared/constants";
 import { updateNotifications, type ActionResult } from "../actions";
 
 interface Persona {
@@ -16,6 +23,7 @@ interface Props {
     marketing_email_consent: boolean;
     daily_roast_time: string;
     daily_roast_persona_slug: string;
+    preferences: NotificationPreferences;
   };
   personas: Persona[];
 }
@@ -88,6 +96,27 @@ export function NotificationsForm({ initial, personas }: Props) {
         checked={initial.marketing_email_consent}
       />
 
+      <hr className="border-input" />
+
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium">Topic mutes</h3>
+        <p className="text-xs text-muted-foreground">
+          Mute individual topics across push + email. Account, billing,
+          security, and safety mail always ships.
+        </p>
+      </div>
+
+      {NOTIFICATION_CATEGORIES.map((cat) => (
+        <CategoryToggle
+          key={cat}
+          category={cat}
+          enabled={
+            notificationsAllowed(initial.preferences, "push", cat) &&
+            notificationsAllowed(initial.preferences, "email", cat)
+          }
+        />
+      ))}
+
       <div className="mt-2 flex items-center justify-between">
         {state && !state.ok && (
           <p role="alert" className="text-sm text-destructive">{state.error}</p>
@@ -139,6 +168,24 @@ function ToggleField({
         className="mt-1 size-4 rounded border-input"
       />
     </label>
+  );
+}
+
+function CategoryToggle({
+  category,
+  enabled,
+}: {
+  category: NotificationCategory;
+  enabled: boolean;
+}) {
+  const meta = NOTIFICATION_CATEGORY_META[category];
+  return (
+    <ToggleField
+      label={meta.label}
+      hint={meta.hint}
+      name={`pref_${category}`}
+      checked={enabled}
+    />
   );
 }
 

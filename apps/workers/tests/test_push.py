@@ -16,6 +16,10 @@ os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
 
+from app.services.notification_prefs import (
+    NOTIFICATION_CATEGORIES,
+    PUSH_TEMPLATE_CATEGORY,
+)
 from app.services.push import (
     PUSH_TEMPLATES,
     DeliveryResult,
@@ -42,6 +46,39 @@ def messages_root() -> Path:
 
 
 # ----- Locale loading -------------------------------------------------------
+
+
+def test_every_push_template_has_a_category() -> None:
+    """Every entry in PUSH_TEMPLATES must map to a known category so the
+    settings-page toggles cover the full push surface. Drift here means
+    a user mutes a category but still gets the push.
+    """
+
+    for template in PUSH_TEMPLATES:
+        assert template in PUSH_TEMPLATE_CATEGORY, f"{template} missing category"
+        assert PUSH_TEMPLATE_CATEGORY[template] in NOTIFICATION_CATEGORIES
+
+
+def test_categories_match_shared_ts_list() -> None:
+    """packages/shared/src/constants.ts is the source of truth for the
+    UI; this Python list must mirror it. Read the TS file and compare.
+    """
+
+    here = Path(__file__).resolve()
+    repo = here.parents[3]
+    ts_path = repo / "packages" / "shared" / "src" / "constants.ts"
+    text = ts_path.read_text(encoding="utf-8")
+    # Grab the array literal between `NOTIFICATION_CATEGORIES = [` and
+    # the closing `]`. No JSON parser needed; it's a static list.
+    start = text.index("NOTIFICATION_CATEGORIES = [")
+    end = text.index("]", start)
+    fragment = text[start:end]
+    ts_keys = {
+        line.strip().strip(",").strip('"').strip("'")
+        for line in fragment.splitlines()[1:]
+        if line.strip() and not line.strip().startswith("//")
+    }
+    assert ts_keys == set(NOTIFICATION_CATEGORIES)
 
 
 def test_loads_all_launch_locales(messages_root: Path) -> None:
@@ -263,6 +300,52 @@ async def test_deliver_respects_mute(messages_root: Path) -> None:
     assert results == []
     assert web.calls == []
     assert expo.calls == []
+
+
+@pytest.mark.asyncio
+async def test_deliver_respects_per_category_mute(messages_root: Path) -> None:
+    """User globally allows push but mutes the 'couples' category — a
+    couples_dispute_created push should be suppressed while a mirror_ready
+    push to the same user goes through.
+    """
+
+    sb = FakeSupabase()
+    sb.table("profiles").rows.append(
+        {
+            "id": "u1",
+            "locale": "en",
+            "notification_push": True,
+            "notification_preferences": {"push": {"couples": False}},
+        }
+    )
+    sb.table("push_subscriptions").rows.append(
+        {"id": "s-web", "user_id": "u1", "platform": "web", "token": "w-tok"}
+    )
+
+    web = RecordingWebSender()
+    expo = RecordingExpoSender()
+
+    muted = await deliver_to_user(
+        user_id="u1",
+        template="couples_dispute_created",
+        variables={"sender_name": "A", "dispute_title": "x"},
+        supabase=sb,  # type: ignore[arg-type]
+        web_sender=web,
+        expo_sender=expo,
+    )
+    assert muted == []
+    assert web.calls == []
+
+    allowed = await deliver_to_user(
+        user_id="u1",
+        template="mirror_ready",
+        variables={},
+        supabase=sb,  # type: ignore[arg-type]
+        web_sender=web,
+        expo_sender=expo,
+    )
+    assert len(allowed) == 1
+    assert allowed[0].status == "sent"
 
 
 @pytest.mark.asyncio

@@ -38,6 +38,11 @@ from supabase import AsyncClient
 
 from app.config import get_settings
 from app.services._db_typing import row_or_none
+from app.services.notification_prefs import (
+    EMAIL_TEMPLATE_CATEGORY,
+    NotificationCategory,
+    prefs_allow,
+)
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -670,6 +675,35 @@ async def _idempotency_seen(
     return row_or_none(res.data) is not None if res is not None else False
 
 
+async def _user_email_muted(
+    supabase: AsyncClient,
+    *,
+    user_id: str,
+    category: NotificationCategory,
+) -> bool:
+    """True when global notification_email is False OR per-category pref
+    explicitly disables this category for the email channel.
+    """
+
+    res = (
+        await supabase.table("profiles")
+        .select("notification_email, notification_preferences")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    row = row_or_none(res.data) if res is not None else None
+    if row is None:
+        return False
+    if row.get("notification_email") is False:
+        return True
+    return not prefs_allow(
+        row.get("notification_preferences"),
+        channel="email",
+        category=category,
+    )
+
+
 async def _idempotency_record(
     supabase: AsyncClient,
     *,
@@ -721,6 +755,21 @@ async def send_email(
             key=idempotency_key,
         )
         return SendResult(status="skipped", reason="idempotent")
+
+    # User preference gate — ESSENTIAL templates (account / billing /
+    # security / safety, mapped to None in EMAIL_TEMPLATE_CATEGORY)
+    # always send; engagement templates honour the global
+    # notification_email toggle plus per-category prefs.
+    category = EMAIL_TEMPLATE_CATEGORY.get(template)
+    if category is not None and user_id is not None:
+        if await _user_email_muted(sb, user_id=user_id, category=category):
+            log.info(
+                "email.muted",
+                template=template,
+                to_hash=_hash_email(to_email),
+                user_id=user_id,
+            )
+            return SendResult(status="skipped", reason="user_muted")
 
     rendered = render(template, variables)
     to_field = f"{to_name} <{to_email}>" if to_name else to_email
