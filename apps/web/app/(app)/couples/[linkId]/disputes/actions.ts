@@ -116,6 +116,10 @@ export async function createDispute(
     return { ok: false, error: `Save failed [${error.code ?? "?"}] ${error.message}` };
   }
 
+  // Fire-and-forget partner notification (push + email). The workers
+  // endpoint is idempotent on dispute_id so re-fires don't double-notify.
+  void notifyPartnerDisputeCreated(row.id);
+
   revalidatePath(`/couples/${parsed.data.link_id}`);
   redirect(`/couples/${parsed.data.link_id}/disputes/${row.id}`);
 }
@@ -255,5 +259,23 @@ async function triggerArbitration(disputeId: string): Promise<void> {
     // Best-effort: caller's UI will show "arbitrating..." and a refresh
     // will reflect the verdict once it lands. Failures get retried by
     // navigating to the detail page.
+  }
+}
+
+async function notifyPartnerDisputeCreated(disputeId: string): Promise<void> {
+  if (!serverEnv.WORKERS_URL || !serverEnv.WORKERS_INTERNAL_SECRET) return;
+  try {
+    await fetch(
+      `${serverEnv.WORKERS_URL}/couples/disputes/${disputeId}/notify-created`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch {
+    // Best-effort: partner can still see the dispute when they log in.
   }
 }

@@ -20,6 +20,8 @@ from app.config import get_settings
 from app.services._db_typing import row_or_none
 from app.services.conversation_prep import PrepError, generate_prep
 from app.services.dispute_arbitrator import ArbitrationError, arbitrate
+from app.services.email import send_email
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -221,3 +223,152 @@ async def generate_conversation_prep(
         .execute()
     )
     return GeneratePrepResponse(ok=True, status="ready", prep=result.prep)
+
+
+# ----- Notify partner of new dispute ----------------------------------------
+
+
+class NotifyResponse(BaseModel):
+    ok: bool
+    delivered: dict[str, bool]
+
+
+@router.post(
+    "/disputes/{dispute_id}/notify-created",
+    response_model=NotifyResponse,
+    dependencies=[Depends(_verify_internal_caller)],
+)
+async def notify_dispute_created(
+    dispute_id: str = Path(..., min_length=36, max_length=36),
+) -> NotifyResponse:
+    """Fire push + email to the partner who hasn't submitted yet.
+
+    Best-effort: returns delivered flags but never raises if a channel
+    fails. The web action calls this fire-and-forget; failures don't
+    block dispute creation.
+
+    Idempotency: keyed on the dispute_id so retries don't double-notify.
+    Push uses scope `push:couples_dispute_created`; email uses
+    `email:couples_dispute_created:<dispute_id>`.
+    """
+
+    supabase = await get_supabase()
+
+    row = row_or_none(
+        await (
+            supabase.table("couple_disputes")
+            .select(
+                "id, couple_link_id, title, "
+                "perspective_a_user_id, perspective_a_text, "
+                "perspective_b_user_id, perspective_b_text"
+            )
+            .eq("id", dispute_id)
+            .single()
+            .execute()
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "dispute not found")
+
+    # The "sender" is the user who submitted a perspective; the "partner"
+    # is the other slot on the link who still needs to submit. If both
+    # slots are filled there's no one to notify.
+    sender_id = row.get("perspective_a_user_id") or row.get("perspective_b_user_id")
+    if not sender_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "no perspective submitted")
+    if row.get("perspective_a_text") and row.get("perspective_b_text"):
+        return NotifyResponse(ok=True, delivered={"push": False, "email": False})
+
+    link = row_or_none(
+        await (
+            supabase.table("couple_links")
+            .select("user_a, user_b, status")
+            .eq("id", row["couple_link_id"])
+            .single()
+            .execute()
+        )
+    )
+    if link is None or link.get("status") != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, "couple link inactive")
+
+    partner_id = link["user_b"] if sender_id == link["user_a"] else link["user_a"]
+    if not partner_id:
+        # Pending invite — partner slot not yet filled. Nothing to do.
+        return NotifyResponse(ok=True, delivered={"push": False, "email": False})
+
+    sender_profile = row_or_none(
+        await (
+            supabase.table("profiles")
+            .select("display_name, username")
+            .eq("id", sender_id)
+            .single()
+            .execute()
+        )
+    )
+    sender_name = "Your partner"
+    if sender_profile:
+        sender_name = (
+            sender_profile.get("display_name")
+            or sender_profile.get("username")
+            or sender_name
+        )
+
+    # Email lives on auth.users — fetched via admin client. Profile
+    # notification_email respect is handled inside send_email.
+    partner_email: str | None = None
+    try:
+        res = await supabase.auth.admin.get_user_by_id(partner_id)
+        user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+        email_val = getattr(user_obj, "email", None) if user_obj else None
+        if isinstance(email_val, str) and email_val:
+            partner_email = email_val
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info("couples.notify.email_lookup_failed", error=str(err))
+
+    settings = get_settings()
+    dispute_url = (
+        f"{str(settings.app_url).rstrip('/')}"
+        f"/couples/{row['couple_link_id']}/disputes/{dispute_id}"
+    )
+    title = row.get("title") or "(untitled)"
+
+    delivered = {"push": False, "email": False}
+
+    try:
+        results = await deliver_to_user(
+            user_id=partner_id,
+            template="couples_dispute_created",
+            variables={"sender_name": sender_name, "dispute_title": title},
+            deep_link=dispute_url,
+            idempotency_key=f"push:couples_dispute_created:{dispute_id}",
+            supabase=supabase,
+        )
+        delivered["push"] = any(r.status in ("sent", "dry_run") for r in results)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning("couples.notify.push_failed", dispute_id=dispute_id, error=str(err))
+
+    if partner_email:
+        try:
+            await send_email(
+                template="couples_dispute_created",
+                to_email=partner_email,
+                variables={
+                    "sender_name": sender_name,
+                    "dispute_title": title,
+                    "dispute_url": dispute_url,
+                },
+                user_id=partner_id,
+                idempotency_key=f"email:couples_dispute_created:{dispute_id}",
+                supabase=supabase,
+            )
+            delivered["email"] = True
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning("couples.notify.email_failed", dispute_id=dispute_id, error=str(err))
+
+    log.info(
+        "couples.dispute_created.notified",
+        dispute_id=dispute_id,
+        partner_id=partner_id,
+        delivered=delivered,
+    )
+    return NotifyResponse(ok=True, delivered=delivered)

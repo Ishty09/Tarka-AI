@@ -55,6 +55,7 @@ TemplateName = Literal[
     "wager_won",
     "wager_lost",
     "couples_invite",
+    "couples_dispute_created",
     "data_export_ready",
     "account_deletion_grace_started",
     "emergency_contact_notification",
@@ -300,6 +301,28 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("inviter_name", "accept_url", "expires_at"),
+    ),
+    "couples_dispute_created": Template(
+        name="couples_dispute_created",
+        subject="{{ sender_name }} opened a dispute: {{ dispute_title }}",
+        html=_wrap(
+            "<h1 style='margin-top:0'>{{ sender_name }} opened a dispute.</h1>"
+            "<p><strong>Subject:</strong> {{ dispute_title }}</p>"
+            "<p>They've written their side. Quarrel won't render a verdict "
+            "until you add yours — your perspective is what unblocks the AI "
+            "mediator.</p>"
+            "<p><a href='{{ dispute_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Add your perspective</a></p>"
+        ),
+        text=(
+            "{{ sender_name }} opened a dispute on Quarrel.\n\n"
+            "Subject: {{ dispute_title }}\n\n"
+            "Add your perspective to unblock the verdict: {{ dispute_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("sender_name", "dispute_title", "dispute_url"),
     ),
     "data_export_ready": Template(
         name="data_export_ready",

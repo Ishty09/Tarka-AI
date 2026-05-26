@@ -123,6 +123,11 @@ SAMPLE_VARS: dict[str, dict[str, Any]] = {
         "accept_url": "https://quarrel.test/couples/accept?code=xyz",
         "expires_at": "2026-05-26",
     },
+    "couples_dispute_created": {
+        "sender_name": "Aisha",
+        "dispute_title": "Sunday night fight about money",
+        "dispute_url": "https://quarrel.test/couples/abc/disputes/xyz",
+    },
     "data_export_ready": {
         "download_url": "https://quarrel.test/exports/abc",
         "ttl_hours": 24,

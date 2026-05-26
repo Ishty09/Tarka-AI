@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "তুমি নিজেই নিজের কথা কাটলে।"
     },
+    "couples_dispute_created": {
+      "body": "বিষয়: {dispute_title}। তোমার দিকটা না এলে রায় আটকে আছে।",
+      "title": "{sender_name} একটা মতবিরোধ তুলেছে।"
+    },
     "couples_invite": {
       "body": "Quarrel কাপলস লিঙ্ক গ্রহণ করতে ট্যাপ করো।",
       "title": "{partner_name} তোমার সাথে স্বাস্থ্যকরভাবে তর্ক করতে চায়।"

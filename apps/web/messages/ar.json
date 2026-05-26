@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "ناقضت نفسك."
     },
+    "couples_dispute_created": {
+      "body": "الموضوع: {dispute_title}. وجهة نظرك هي ما يفتح الحكم.",
+      "title": "‏{sender_name} فتح نزاعًا للتو."
+    },
     "couples_invite": {
       "body": "اضغط لقبول رابط الأزواج في Quarrel.",
       "title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية)."
