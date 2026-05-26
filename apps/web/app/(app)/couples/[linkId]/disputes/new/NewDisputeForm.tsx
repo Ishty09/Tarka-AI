@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { createDispute, type ActionResult } from "../actions";
 
@@ -43,6 +44,14 @@ export function NewDisputeForm({ linkId }: { linkId: string }) {
       {state?.ok === false && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}
+          {state.upgrade && (
+            <>
+              {" "}
+              <Link href="/pricing" className="font-medium underline">
+                Upgrade →
+              </Link>
+            </>
+          )}
         </p>
       )}
 

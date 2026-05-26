@@ -15,7 +15,7 @@ import { couplesDisputesPerMonthFor, currentMonthStart } from "@/lib/couples";
 
 export type ActionResult =
   | { ok: true; payload?: unknown }
-  | { ok: false; error: string };
+  | { ok: false; error: string; upgrade?: boolean };
 
 const newDisputeSchema = z.object({
   link_id: z.string().uuid(),
@@ -84,7 +84,8 @@ export async function createDispute(
     if ((count ?? 0) >= monthCap) {
       return {
         ok: false,
-        error: `You hit your ${tier} tier cap of ${monthCap} disputes this month. Upgrade for more.`,
+        error: `You hit your ${tier} tier cap of ${monthCap} disputes this month.`,
+        upgrade: true,
       };
     }
   }

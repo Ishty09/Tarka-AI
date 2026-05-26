@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { createPrep, type ActionResult } from "./actions";
 
@@ -36,7 +37,17 @@ export function NewPrepForm({ linkId }: { linkId: string }) {
         className="rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
       {state?.ok === false && (
-        <p role="alert" className="text-sm text-destructive">{state.error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {state.error}
+          {state.upgrade && (
+            <>
+              {" "}
+              <Link href="/pricing" className="font-medium underline">
+                Upgrade →
+              </Link>
+            </>
+          )}
+        </p>
       )}
       <button
         type="submit"

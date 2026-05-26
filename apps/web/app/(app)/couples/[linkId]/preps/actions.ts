@@ -10,7 +10,7 @@ import { couplesPrepsPerMonthFor, currentMonthStart } from "@/lib/couples";
 
 export type ActionResult =
   | { ok: true; payload?: { id?: string } }
-  | { ok: false; error: string };
+  | { ok: false; error: string; upgrade?: boolean };
 
 const createSchema = z.object({
   link_id: z.string().uuid(),
@@ -65,7 +65,8 @@ export async function createPrep(
     if ((count ?? 0) >= monthCap) {
       return {
         ok: false,
-        error: `You hit your ${tier} tier cap of ${monthCap} preps this month. Upgrade for more.`,
+        error: `You hit your ${tier} tier cap of ${monthCap} preps this month.`,
+        upgrade: true,
       };
     }
   }
