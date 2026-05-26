@@ -23,9 +23,11 @@ import structlog
 from pydantic import BaseModel, Field, ValidationError
 from supabase import AsyncClient
 
+from app.config import get_settings
 from app.prompts.wager_evaluator import WAGER_EVALUATOR_PROMPT
 from app.services import analytics
-from app.services._db_typing import rows as _rows
+from app.services._db_typing import row_or_none, rows as _rows
+from app.services.email import TemplateName as EmailTemplateName, send_email
 from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -34,6 +36,7 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -270,6 +273,152 @@ async def disburse(
     return False
 
 
+# ----- Outcome notification -------------------------------------------------
+
+
+def _format_stake(cents: int | None) -> str:
+    """Money format used in email + push variables. Two-decimal dollars
+    with thousand separators (e.g. "$1,234.00"). Falls back to "$0.00"
+    for invalid input.
+    """
+
+    if not isinstance(cents, int) or cents < 0:
+        return "$0.00"
+    dollars, remainder = divmod(cents, 100)
+    return f"${dollars:,}.{remainder:02d}"
+
+
+def _format_stake_amount_only(cents: int | None) -> str:
+    """`${stake}` push body has a literal "$" already; return just the
+    formatted dollar amount.
+    """
+
+    if not isinstance(cents, int) or cents < 0:
+        return "0.00"
+    dollars, remainder = divmod(cents, 100)
+    return f"{dollars:,}.{remainder:02d}"
+
+
+async def _resolve_email(
+    supabase: AsyncClient, *, user_id: str
+) -> str | None:
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info(
+            "wager_evaluator.email_lookup_failed", user_id=user_id, error=str(err)
+        )
+        return None
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    return email_val if isinstance(email_val, str) and email_val else None
+
+
+async def _resolve_anti_charity_name(
+    supabase: AsyncClient, *, slug: str | None
+) -> str:
+    if not slug:
+        return "(unknown)"
+    try:
+        res = (
+            await supabase.table("anti_charities")
+            .select("name")
+            .eq("slug", slug)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info(
+            "wager_evaluator.anti_charity_lookup_failed",
+            slug=slug,
+            error=str(err),
+        )
+        return slug
+    row = row_or_none(res.data) if res is not None else None
+    name_val = row.get("name") if row else None
+    if isinstance(name_val, str) and name_val:
+        return name_val
+    return slug
+
+
+async def _notify_outcome(
+    supabase: AsyncClient,
+    *,
+    wager: dict[str, Any],
+    outcome: Outcome,
+) -> None:
+    """Push + email after a verdict lands.
+
+    - `failed`  → push wager_failed + email wager_lost
+    - `succeeded` → email wager_won only (no "you won" push per §13;
+                    the spec only registers a wager_failed push template)
+
+    Idempotency is per (wager_id, outcome) — a wager only ever has one
+    final outcome so retries cleanly dedupe.
+    """
+
+    wager_id = str(wager["id"])
+    user_id = wager.get("user_id")
+    if not isinstance(user_id, str) or not user_id:
+        return
+
+    app_url = str(get_settings().app_url).rstrip("/")
+    stake_cents = wager.get("stake_cents") if isinstance(wager.get("stake_cents"), int) else 0
+
+    if outcome == "failed":
+        anti_charity_name = await _resolve_anti_charity_name(
+            supabase, slug=wager.get("anti_charity_slug")
+        )
+        try:
+            await deliver_to_user(
+                user_id=user_id,
+                template="wager_failed",
+                variables={
+                    "stake": _format_stake_amount_only(stake_cents),
+                    "anti_charity": anti_charity_name,
+                },
+                deep_link=f"{app_url}/wagers/{wager_id}",
+                idempotency_key=f"push:wager_failed:{wager_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "wager_evaluator.notify.push_failed",
+                wager_id=wager_id,
+                error=str(err),
+            )
+
+    email_addr = await _resolve_email(supabase, user_id=user_id)
+    if email_addr:
+        email_template: EmailTemplateName = (
+            "wager_lost" if outcome == "failed" else "wager_won"
+        )
+        variables: dict[str, Any] = {
+            "goal": wager.get("goal") or "(your goal)",
+            "stake_formatted": _format_stake(stake_cents),
+            "wager_id": wager_id,
+        }
+        if outcome == "failed":
+            variables["anti_charity_name"] = await _resolve_anti_charity_name(
+                supabase, slug=wager.get("anti_charity_slug")
+            )
+        try:
+            await send_email(
+                template=email_template,
+                to_email=email_addr,
+                variables=variables,
+                user_id=user_id,
+                idempotency_key=f"email:{email_template}:{wager_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "wager_evaluator.notify.email_failed",
+                wager_id=wager_id,
+                error=str(err),
+            )
+
+
 # ----- Orchestration --------------------------------------------------------
 
 
@@ -340,6 +489,17 @@ async def evaluate_wager(
             "capture_applied": capture_applied,
         },
     )
+
+    # Best-effort outcome notification — push (failed only) + email
+    # (both outcomes). Failures here don't roll back the verdict.
+    try:
+        await _notify_outcome(supabase, wager=wager, outcome=verdict.outcome)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "wager_evaluator.notify_failed",
+            wager_id=wager_id,
+            error=str(err),
+        )
 
     return WagerEvaluation(
         wager_id=wager_id,

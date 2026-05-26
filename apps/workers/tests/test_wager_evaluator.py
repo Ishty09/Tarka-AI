@@ -8,14 +8,26 @@ batch orchestration.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 
+os.environ.setdefault("NEXT_PUBLIC_APP_URL", "https://quarrel.test")
+os.environ.setdefault("LITELLM_PROXY_URL", "https://litellm.test")
+os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
+
+from app.services import wager_evaluator as we_mod
 from app.services.llm import LiteLLMError, LiteLLMNetworkError
 from app.services.wager_evaluator import (
     EvaluatorVerdict,
+    _format_stake,
+    _format_stake_amount_only,
+    _notify_outcome,
     evaluate_wager,
     generate_verdict,
     persist_verdict,
@@ -344,3 +356,192 @@ async def test_run_due_finds_only_active_with_end_at_passed() -> None:
     assert rows["due-active"]["status"] == "succeeded"
     assert rows["future-active"]["status"] == "active"
     assert rows["due-succeeded"]["status"] == "succeeded"  # untouched
+
+
+# ----- Stake formatting ----------------------------------------------------
+
+
+def test_format_stake_two_decimal_dollars() -> None:
+    assert _format_stake(5000) == "$50.00"
+    assert _format_stake(100_000) == "$1,000.00"
+    assert _format_stake(1234) == "$12.34"
+    assert _format_stake(0) == "$0.00"
+    assert _format_stake(None) == "$0.00"
+    assert _format_stake(-1) == "$0.00"
+
+
+def test_format_stake_amount_only_strips_dollar_sign() -> None:
+    """${stake} push body has a literal '$' already; helper returns just
+    the number so we don't end up rendering '$$50.00'.
+    """
+
+    assert _format_stake_amount_only(5000) == "50.00"
+    assert _format_stake_amount_only(100_000) == "1,000.00"
+
+
+# ----- _notify_outcome -----------------------------------------------------
+
+
+async def test_notify_outcome_failed_fires_push_and_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed verdict must fire BOTH the wager_failed push (so the
+    user finds out off-app) AND the wager_lost email (so they have a
+    receipt for the anti-charity donation).
+    """
+
+    sb = FakeSupabase()
+    sb.table("anti_charities").rows.append(
+        {"slug": "heritage-foundation", "name": "Heritage Foundation"}
+    )
+
+    push_calls: list[dict[str, Any]] = []
+    email_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return [type("R", (), {"status": "sent"})()]
+
+    async def fake_email(**kwargs: Any) -> Any:
+        email_calls.append(kwargs)
+        return type("R", (), {"status": "sent"})()
+
+    async def fake_resolve_email(_sb: Any, *, user_id: str) -> str:
+        return f"{user_id}@example.test"
+
+    monkeypatch.setattr(we_mod, "deliver_to_user", fake_push)
+    monkeypatch.setattr(we_mod, "send_email", fake_email)
+    monkeypatch.setattr(we_mod, "_resolve_email", fake_resolve_email)
+
+    await _notify_outcome(
+        sb,  # type: ignore[arg-type]
+        wager=_wager(wager_id="w-fail"),
+        outcome="failed",
+    )
+
+    # Push: wager_failed template, with the anti-charity's HUMAN name
+    # (not the slug) and the stake amount without a leading "$".
+    assert len(push_calls) == 1
+    pcall = push_calls[0]
+    assert pcall["template"] == "wager_failed"
+    assert pcall["variables"] == {
+        "stake": "50.00",
+        "anti_charity": "Heritage Foundation",
+    }
+    assert pcall["idempotency_key"] == "push:wager_failed:w-fail"
+    assert "/wagers/w-fail" in pcall["deep_link"]
+
+    # Email: wager_lost template, with stake_formatted (the leading "$"
+    # version) and the resolved charity name.
+    assert len(email_calls) == 1
+    ecall = email_calls[0]
+    assert ecall["template"] == "wager_lost"
+    assert ecall["variables"]["stake_formatted"] == "$50.00"
+    assert ecall["variables"]["anti_charity_name"] == "Heritage Foundation"
+    assert ecall["variables"]["goal"] == "Run 4x/week."
+    assert ecall["variables"]["wager_id"] == "w-fail"
+    assert ecall["idempotency_key"] == "email:wager_lost:w-fail"
+
+
+async def test_notify_outcome_succeeded_fires_email_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A succeeded verdict fires only the wager_won email — there's no
+    wager_won push template (§13 deliberately doesn't register one).
+    """
+
+    sb = FakeSupabase()
+    push_calls: list[dict[str, Any]] = []
+    email_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return []
+
+    async def fake_email(**kwargs: Any) -> Any:
+        email_calls.append(kwargs)
+        return type("R", (), {"status": "sent"})()
+
+    async def fake_resolve_email(_sb: Any, *, user_id: str) -> str:
+        return f"{user_id}@example.test"
+
+    monkeypatch.setattr(we_mod, "deliver_to_user", fake_push)
+    monkeypatch.setattr(we_mod, "send_email", fake_email)
+    monkeypatch.setattr(we_mod, "_resolve_email", fake_resolve_email)
+
+    await _notify_outcome(
+        sb,  # type: ignore[arg-type]
+        wager=_wager(wager_id="w-win"),
+        outcome="succeeded",
+    )
+
+    assert push_calls == []
+    assert len(email_calls) == 1
+    ecall = email_calls[0]
+    assert ecall["template"] == "wager_won"
+    assert "anti_charity_name" not in ecall["variables"]
+    assert ecall["idempotency_key"] == "email:wager_won:w-win"
+
+
+async def test_notify_outcome_swallows_email_lookup_miss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """User without an auth email row (e.g. social-login that omits it)
+    should still get the push but skip the email cleanly — no crash.
+    """
+
+    sb = FakeSupabase()
+    sb.table("anti_charities").rows.append(
+        {"slug": "heritage-foundation", "name": "Heritage Foundation"}
+    )
+
+    push_calls: list[dict[str, Any]] = []
+    email_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return [type("R", (), {"status": "sent"})()]
+
+    async def fake_email(**kwargs: Any) -> Any:
+        email_calls.append(kwargs)
+        return type("R", (), {"status": "sent"})()
+
+    async def no_email(_sb: Any, *, user_id: str) -> str | None:
+        return None
+
+    monkeypatch.setattr(we_mod, "deliver_to_user", fake_push)
+    monkeypatch.setattr(we_mod, "send_email", fake_email)
+    monkeypatch.setattr(we_mod, "_resolve_email", no_email)
+
+    await _notify_outcome(
+        sb,  # type: ignore[arg-type]
+        wager=_wager(),
+        outcome="failed",
+    )
+
+    assert len(push_calls) == 1
+    assert email_calls == []
+
+
+async def test_evaluate_wager_invokes_notify(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Integration check — evaluate_wager's happy path actually calls
+    _notify_outcome with the verdict outcome.
+    """
+
+    sb = FakeSupabase()
+    sb.table("wagers").rows.append(_wager(wager_id="w-int"))
+    notify_calls: list[dict[str, Any]] = []
+
+    async def fake_notify(_sb: Any, *, wager: dict[str, Any], outcome: str) -> None:
+        notify_calls.append({"wager_id": wager["id"], "outcome": outcome})
+
+    monkeypatch.setattr(we_mod, "_notify_outcome", fake_notify)
+
+    llm = FakeLLM(content=json.dumps(GOOD_VERDICT))
+    out = await evaluate_wager(
+        sb,  # type: ignore[arg-type]
+        wager=sb.table("wagers").rows[0],
+        client=llm,  # type: ignore[arg-type]
+    )
+    assert out is not None and out.outcome == "succeeded"
+    assert notify_calls == [{"wager_id": "w-int", "outcome": "succeeded"}]
