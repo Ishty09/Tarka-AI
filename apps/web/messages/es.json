@@ -31,6 +31,10 @@
       "body": "Quarrel está pesando ambos lados de \"{dispute_title}\".",
       "title": "{partner_name} respondió a tu disputa."
     },
+    "couples_prep_ready": {
+      "body": "Tema: {topic}. Privado — tu pareja no lo ve.",
+      "title": "Tu preparación de conversación está lista."
+    },
     "couples_report_ready": {
       "body": "Siete días, honesto. Los dos ven lo mismo.",
       "title": "Tu informe semanal de pareja está listo."

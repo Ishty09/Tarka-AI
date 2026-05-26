@@ -142,6 +142,10 @@ SAMPLE_VARS: dict[str, dict[str, Any]] = {
         "period_start": "2026-05-20",
         "period_end": "2026-05-26",
     },
+    "couples_prep_ready": {
+        "topic": "asking to move in together",
+        "prep_url": "https://quarrel.test/couples/abc/preps/xyz",
+    },
     "data_export_ready": {
         "download_url": "https://quarrel.test/exports/abc",
         "ttl_hours": 24,

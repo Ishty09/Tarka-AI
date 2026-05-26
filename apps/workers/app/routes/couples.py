@@ -238,6 +238,22 @@ async def generate_conversation_prep(
         .eq("id", prep_id)
         .execute()
     )
+
+    # Best-effort push + email to the prep's owner. Failures don't
+    # change the GenerateResponse — the prep itself is saved.
+    try:
+        await _notify_prep_ready(
+            supabase,
+            prep_id=prep_id,
+            user_id=row["user_id"],
+            couple_link_id=row["couple_link_id"],
+            topic=row["topic"],
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "conversation_prep.notify_failed", prep_id=prep_id, error=str(err)
+        )
+
     return GeneratePrepResponse(ok=True, status="ready", prep=result.prep)
 
 
@@ -596,3 +612,54 @@ async def _notify_dispute_arbitrated(
                 user_id=user_id,
                 error=str(err),
             )
+
+
+# ----- Notify prep owner when async generation finishes --------------------
+
+
+async def _notify_prep_ready(
+    supabase: Any,
+    *,
+    prep_id: str,
+    user_id: str,
+    couple_link_id: str,
+    topic: str,
+) -> None:
+    """Push + email the prep owner. Preps are private — only the user
+    who created them ever sees them, so we never notify the partner.
+    Idempotency keyed on prep_id.
+    """
+
+    app_url = str(get_settings().app_url).rstrip("/")
+    prep_url = f"{app_url}/couples/{couple_link_id}/preps/{prep_id}"
+
+    try:
+        await deliver_to_user(
+            user_id=user_id,
+            template="couples_prep_ready",
+            variables={"topic": topic},
+            deep_link=prep_url,
+            idempotency_key=f"push:couples_prep_ready:{prep_id}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "couples.prep_ready.push_failed", prep_id=prep_id, error=str(err)
+        )
+
+    email_addr = await _resolve_email(supabase, user_id)
+    if not email_addr:
+        return
+    try:
+        await send_email(
+            template="couples_prep_ready",
+            to_email=email_addr,
+            variables={"topic": topic, "prep_url": prep_url},
+            user_id=user_id,
+            idempotency_key=f"email:couples_prep_ready:{prep_id}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "couples.prep_ready.email_failed", prep_id=prep_id, error=str(err)
+        )

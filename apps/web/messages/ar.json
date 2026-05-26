@@ -31,6 +31,10 @@
       "body": "‏Quarrel يزن الجانبين بشأن \"{dispute_title}\".",
       "title": "‏{partner_name} رد على نزاعك."
     },
+    "couples_prep_ready": {
+      "body": "الموضوع: {topic}. خاص — لن يراه شريكك.",
+      "title": "تحضير محادثتك جاهز."
+    },
     "couples_report_ready": {
       "body": "سبعة أيام، بصدق. كلاكما يرى نفس الشيء.",
       "title": "تقرير الزوجين الأسبوعي جاهز."

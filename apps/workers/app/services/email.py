@@ -59,6 +59,7 @@ TemplateName = Literal[
     "couples_dispute_perspective_added",
     "couples_dispute_arbitrated",
     "couples_report_ready",
+    "couples_prep_ready",
     "data_export_ready",
     "account_deletion_grace_started",
     "emergency_contact_notification",
@@ -391,6 +392,27 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("report_url", "period_start", "period_end"),
+    ),
+    "couples_prep_ready": Template(
+        name="couples_prep_ready",
+        subject="Your conversation prep is ready: {{ topic }}",
+        html=_wrap(
+            "<h1 style='margin-top:0'>Your prep is ready.</h1>"
+            "<p><strong>Topic:</strong> {{ topic }}</p>"
+            "<p>Quarrel ran a private rehearsal — likely partner reactions, "
+            "your weak spots, and one opening line that doesn't sound rehearsed.</p>"
+            "<p>Partner doesn't see this. It's for you.</p>"
+            "<p><a href='{{ prep_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Open the prep</a></p>"
+        ),
+        text=(
+            "Your conversation prep on '{{ topic }}' is ready.\n\n"
+            "Private — partner doesn't see this. Open: {{ prep_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("topic", "prep_url"),
     ),
     "data_export_ready": Template(
         name="data_export_ready",

@@ -31,6 +31,10 @@
       "body": "Quarrel is weighing both sides on \"{dispute_title}\".",
       "title": "{partner_name} answered your dispute."
     },
+    "couples_prep_ready": {
+      "body": "Topic: {topic}. Private — partner doesn't see this.",
+      "title": "Your conversation prep is ready."
+    },
     "couples_report_ready": {
       "body": "Seven days, honest. Both of you see the same thing.",
       "title": "Your weekly couples report is ready."
