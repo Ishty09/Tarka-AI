@@ -58,6 +58,7 @@ TemplateName = Literal[
     "couples_dispute_created",
     "couples_dispute_perspective_added",
     "couples_dispute_arbitrated",
+    "couples_report_ready",
     "data_export_ready",
     "account_deletion_grace_started",
     "emergency_contact_notification",
@@ -367,6 +368,29 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("dispute_title", "dispute_url"),
+    ),
+    "couples_report_ready": Template(
+        name="couples_report_ready",
+        subject="Your weekly couples report is ready",
+        html=_wrap(
+            "<h1 style='margin-top:0'>Your weekly couples report.</h1>"
+            "<p>Quarrel weighed seven days of check-ins, disputes, and notes "
+            "between you and your partner.</p>"
+            "<p>It's honest, not flattering. Both of you see the same thing.</p>"
+            "<p><a href='{{ report_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Read the report</a></p>"
+            "<p style='color:#9ca3af;font-size:12px'>"
+            "Window: {{ period_start }} → {{ period_end }}"
+            "</p>"
+        ),
+        text=(
+            "Your weekly couples report ({{ period_start }} → {{ period_end }}) is ready.\n\n"
+            "Honest, not flattering. Read it: {{ report_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("report_url", "period_start", "period_end"),
     ),
     "data_export_ready": Template(
         name="data_export_ready",

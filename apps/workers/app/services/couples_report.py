@@ -28,9 +28,12 @@ from typing import Any
 
 import structlog
 
+from app.config import get_settings
 from app.services._db_typing import rows as _rows
+from app.services.email import send_email
 from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import LiteLLMError, LiteLLMNetworkError, QUARREL_ARGUE, get_llm_client
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -178,6 +181,22 @@ async def run_weekly() -> CoupleReportResult:
         )
         inserted += 1
 
+        # Best-effort: notify both partners. Failures don't poison the
+        # rest of the batch — keep iterating through other couples.
+        try:
+            await _notify_report_ready(
+                supabase,
+                link_id=link_id,
+                user_a=link["user_a"],
+                user_b=link.get("user_b"),
+                period_start=period_start,
+                period_end=period_end,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "couples_report.notify_failed", link_id=link_id, error=str(err)
+            )
+
     return CoupleReportResult(
         period_start=period_start,
         period_end=period_end,
@@ -224,3 +243,73 @@ def _build_prompt(
                 lines.append(f"  patterns: {', '.join(arb['patterns_detected'])}")
 
     return "\n".join(lines)
+
+
+async def _resolve_email(supabase: Any, user_id: str) -> str | None:
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info("couples_report.email_lookup_failed", user_id=user_id, error=str(err))
+        return None
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    return email_val if isinstance(email_val, str) and email_val else None
+
+
+async def _notify_report_ready(
+    supabase: Any,
+    *,
+    link_id: str,
+    user_a: str,
+    user_b: str | None,
+    period_start: date,
+    period_end: date,
+) -> None:
+    """Push + email both partners that the weekly report is ready.
+
+    Idempotency keys include period_start so a re-run of the same week
+    can't double-notify, but a fresh week is treated as a new event.
+    """
+
+    app_url = str(get_settings().app_url).rstrip("/")
+    report_url = f"{app_url}/couples/{link_id}/reports"
+    p_start = period_start.isoformat()
+    p_end = period_end.isoformat()
+
+    for user_id in (user_a, user_b):
+        if not user_id:
+            continue
+        try:
+            await deliver_to_user(
+                user_id=user_id,
+                template="couples_report_ready",
+                variables={},
+                deep_link=report_url,
+                idempotency_key=f"push:couples_report_ready:{link_id}:{p_start}:{user_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "couples_report.push_failed", user_id=user_id, error=str(err)
+            )
+
+        email_addr = await _resolve_email(supabase, user_id)
+        if not email_addr:
+            continue
+        try:
+            await send_email(
+                template="couples_report_ready",
+                to_email=email_addr,
+                variables={
+                    "report_url": report_url,
+                    "period_start": p_start,
+                    "period_end": p_end,
+                },
+                user_id=user_id,
+                idempotency_key=f"email:couples_report_ready:{link_id}:{p_start}:{user_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "couples_report.email_failed", user_id=user_id, error=str(err)
+            )

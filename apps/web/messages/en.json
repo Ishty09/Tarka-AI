@@ -31,6 +31,10 @@
       "body": "Quarrel is weighing both sides on \"{dispute_title}\".",
       "title": "{partner_name} answered your dispute."
     },
+    "couples_report_ready": {
+      "body": "Seven days, honest. Both of you see the same thing.",
+      "title": "Your weekly couples report is ready."
+    },
     "couples_invite": {
       "body": "Tap to accept the Quarrel couples link.",
       "title": "{partner_name} wants to argue with you (in a healthy way)."

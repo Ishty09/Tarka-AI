@@ -31,6 +31,10 @@
       "body": "Quarrel está pesando os dois lados em \"{dispute_title}\".",
       "title": "{partner_name} respondeu à sua disputa."
     },
+    "couples_report_ready": {
+      "body": "Sete dias, honesto. Os dois veem a mesma coisa.",
+      "title": "Seu relatório semanal de casal está pronto."
+    },
     "couples_invite": {
       "body": "Toque para aceitar o vínculo de casal do Quarrel.",
       "title": "{partner_name} quer discutir com você (saudavelmente)."

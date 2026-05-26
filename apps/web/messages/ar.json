@@ -31,6 +31,10 @@
       "body": "‏Quarrel يزن الجانبين بشأن \"{dispute_title}\".",
       "title": "‏{partner_name} رد على نزاعك."
     },
+    "couples_report_ready": {
+      "body": "سبعة أيام، بصدق. كلاكما يرى نفس الشيء.",
+      "title": "تقرير الزوجين الأسبوعي جاهز."
+    },
     "couples_invite": {
       "body": "اضغط لقبول رابط الأزواج في Quarrel.",
       "title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية)."
