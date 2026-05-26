@@ -29,3 +29,17 @@ export function inviteExpiry(now = Date.now()): string {
 export function activeCoupleLimitFor(tier: Tier): number {
   return TIER_LIMITS[tier].couple_links_active;
 }
+
+export function couplesDisputesPerMonthFor(tier: Tier): number | null {
+  return TIER_LIMITS[tier].couple_disputes_per_month;
+}
+
+export function couplesPrepsPerMonthFor(tier: Tier): number | null {
+  return TIER_LIMITS[tier].couple_preps_per_month;
+}
+
+/** Returns the first day of the current month as YYYY-MM-DD. */
+export function currentMonthStart(): string {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+}

@@ -22,7 +22,10 @@
 model_list:
   - model_name: quarrel-argue
     litellm_params:
-      model: openai/gpt-5
+      # gpt-5-mini for chat replies — ~3x faster than gpt-5 with
+      # acceptable pushback quality. Switch back to openai/gpt-5 if
+      # depth becomes a real complaint at scale.
+      model: openai/gpt-5-mini
       api_key: os.environ/OPENAI_API_KEY
       temperature: 0.7
 

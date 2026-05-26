@@ -3,8 +3,10 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { type Tier } from "@quarrel/shared/constants";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { serverEnv } from "@/lib/env";
+import { couplesPrepsPerMonthFor, currentMonthStart } from "@/lib/couples";
 
 export type ActionResult =
   | { ok: true; payload?: { id?: string } }
@@ -45,6 +47,27 @@ export async function createPrep(
   }
   if (user.id !== link.user_a && user.id !== link.user_b) {
     return { ok: false, error: "Not a member of this link." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tier")
+    .eq("id", user.id)
+    .maybeSingle();
+  const tier = (profile?.tier ?? "free") as Tier;
+  const monthCap = couplesPrepsPerMonthFor(tier);
+  if (monthCap !== null) {
+    const { count } = await supabase
+      .from("couple_conversation_preps")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", currentMonthStart());
+    if ((count ?? 0) >= monthCap) {
+      return {
+        ok: false,
+        error: `You hit your ${tier} tier cap of ${monthCap} preps this month. Upgrade for more.`,
+      };
+    }
   }
 
   const { data: row, error } = await supabase

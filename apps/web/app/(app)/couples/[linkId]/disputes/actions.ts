@@ -3,8 +3,10 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { type Tier } from "@quarrel/shared/constants";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { serverEnv } from "@/lib/env";
+import { couplesDisputesPerMonthFor, currentMonthStart } from "@/lib/couples";
 
 // Couple-dispute server actions. Both partners can independently
 // create a dispute and submit their perspective; the LLM arbitration
@@ -60,6 +62,31 @@ export async function createDispute(
   }
   if (user.id !== link.user_a && user.id !== link.user_b) {
     return { ok: false, error: "Not a member of this link." };
+  }
+
+  // Tier cap: count this user's CREATED disputes this calendar month.
+  // Reading + adding-perspective on the partner's disputes is free.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tier")
+    .eq("id", user.id)
+    .maybeSingle();
+  const tier = (profile?.tier ?? "free") as Tier;
+  const monthCap = couplesDisputesPerMonthFor(tier);
+  if (monthCap !== null) {
+    const isAUser = user.id === link.user_a;
+    const ownedCol = isAUser ? "perspective_a_user_id" : "perspective_b_user_id";
+    const { count } = await supabase
+      .from("couple_disputes")
+      .select("id", { count: "exact", head: true })
+      .eq(ownedCol, user.id)
+      .gte("created_at", currentMonthStart());
+    if ((count ?? 0) >= monthCap) {
+      return {
+        ok: false,
+        error: `You hit your ${tier} tier cap of ${monthCap} disputes this month. Upgrade for more.`,
+      };
+    }
   }
 
   const isA = user.id === link.user_a;

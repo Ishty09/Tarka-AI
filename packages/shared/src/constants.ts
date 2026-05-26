@@ -111,6 +111,12 @@ interface TierLimit {
   /** Created + installed combined. */
   active_personas: number | null;
   couple_links_active: number;
+  /** null = unlimited. Per-month cap on couples disputes the user can
+   *  CREATE. Reading + adding perspective on partner-created disputes
+   *  doesn't count against the creator's quota. */
+  couple_disputes_per_month: number | null;
+  /** null = unlimited. Per-month cap on private pre-conversation preps. */
+  couple_preps_per_month: number | null;
   group_seats_per_room: number;
   wager_active_stakes: number;
   /** USD cents; 0 means wagers disabled at this tier. */
@@ -136,7 +142,12 @@ export const TIER_LIMITS: Record<Tier, TierLimit> = {
     messages_per_day: 15,
     council_runs: { period: "week", limit: 1 },
     active_personas: 2,
-    couple_links_active: 0,
+    // Couples is Quarrel's flagship — free users get 1 active link to
+    // try, with tight per-month caps on the AI-expensive operations
+    // (disputes + preps) so the upgrade lever stays strong.
+    couple_links_active: 1,
+    couple_disputes_per_month: 2,
+    couple_preps_per_month: 1,
     group_seats_per_room: 0,
     wager_active_stakes: 0,
     wager_max_stake_cents: 0,
@@ -154,6 +165,8 @@ export const TIER_LIMITS: Record<Tier, TierLimit> = {
     council_runs: { period: "day", limit: 3 },
     active_personas: 25,
     couple_links_active: 1,
+    couple_disputes_per_month: 20,
+    couple_preps_per_month: 10,
     group_seats_per_room: 5,
     wager_active_stakes: 3,
     wager_max_stake_cents: 10_000,
@@ -171,6 +184,8 @@ export const TIER_LIMITS: Record<Tier, TierLimit> = {
     council_runs: { period: "day", limit: 20 },
     active_personas: null,
     couple_links_active: 3,
+    couple_disputes_per_month: null,
+    couple_preps_per_month: null,
     group_seats_per_room: 15,
     wager_active_stakes: 10,
     wager_max_stake_cents: 100_000,
