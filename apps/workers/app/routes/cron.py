@@ -36,6 +36,7 @@ from app.services.daily_roast import run_window as run_daily_roast_window
 from app.services.drill_sergeant import run_today as run_drill_sergeant_today
 from app.services.eulogy import previous_quarter_window, run_quarter
 from app.services.mirror import run_weekly as run_mirror_window
+from app.services.wager_checkin_nudges import run_nudges as run_wager_checkin_nudges
 from app.services.wager_evaluator import run_due_evaluations
 
 log = structlog.get_logger(__name__)
@@ -478,5 +479,36 @@ async def couple_issue_nudges() -> IssueNudgeResponse:
     return IssueNudgeResponse(
         eligible_issues=result.eligible,
         notified=result.notified,
+        skipped=result.skipped,
+    )
+
+
+# ----- Wager daily check-in nudges (§9.5.5, §13 push.wager_checkin) --------
+
+
+class WagerCheckinNudgeResponse(BaseModel):
+    eligible_wagers: int
+    sent: int
+    skipped: int
+
+
+@router.post(
+    "/wager-checkin-nudges",
+    response_model=WagerCheckinNudgeResponse,
+    dependencies=[Depends(_verify_cron_secret)],
+)
+async def wager_checkin_nudges() -> WagerCheckinNudgeResponse:
+    """Daily push to users with active wagers who haven't checked in yet.
+
+    One push per active wager (each has its own goal + stake). Skips
+    wagers that already have a wager_checkins row for today, regardless
+    of status. Idempotent at (wager_id, today) so cron retries on the
+    same day don't double-fire.
+    """
+
+    result = await run_wager_checkin_nudges()
+    return WagerCheckinNudgeResponse(
+        eligible_wagers=result.eligible,
+        sent=result.sent,
         skipped=result.skipped,
     )
