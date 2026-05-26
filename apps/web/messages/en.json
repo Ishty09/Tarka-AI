@@ -27,6 +27,10 @@
       "body": "Subject: {dispute_title}. Your perspective unblocks the verdict.",
       "title": "{sender_name} just opened a dispute."
     },
+    "couples_dispute_perspective_added": {
+      "body": "Quarrel is weighing both sides on \"{dispute_title}\".",
+      "title": "{partner_name} answered your dispute."
+    },
     "couples_invite": {
       "body": "Tap to accept the Quarrel couples link.",
       "title": "{partner_name} wants to argue with you (in a healthy way)."

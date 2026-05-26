@@ -190,10 +190,12 @@ export async function submitPerspective(
     return { ok: false, error: `Save failed [${updateErr.code ?? "?"}] ${updateErr.message}` };
   }
 
-  // Now check: are both perspectives in? If yes, kick off arbitration.
+  // Now check: are both perspectives in? If yes, kick off arbitration
+  // and notify the original creator that their side has been answered.
   const aText = isA ? parsed.data.perspective : dispute.perspective_a_text;
   const bText = isA ? dispute.perspective_b_text : parsed.data.perspective;
   if (aText && bText) {
+    void notifyPerspectiveAdded(parsed.data.dispute_id);
     await triggerArbitration(parsed.data.dispute_id);
   }
 
@@ -277,5 +279,24 @@ async function notifyPartnerDisputeCreated(disputeId: string): Promise<void> {
     );
   } catch {
     // Best-effort: partner can still see the dispute when they log in.
+  }
+}
+
+async function notifyPerspectiveAdded(disputeId: string): Promise<void> {
+  if (!serverEnv.WORKERS_URL || !serverEnv.WORKERS_INTERNAL_SECRET) return;
+  try {
+    await fetch(
+      `${serverEnv.WORKERS_URL}/couples/disputes/${disputeId}/notify-perspective-added`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch {
+    // Best-effort: the verdict-ready notification (commit e8c7437) still
+    // covers the creator once arbitration lands.
   }
 }

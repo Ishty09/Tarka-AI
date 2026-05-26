@@ -56,6 +56,7 @@ TemplateName = Literal[
     "wager_lost",
     "couples_invite",
     "couples_dispute_created",
+    "couples_dispute_perspective_added",
     "couples_dispute_arbitrated",
     "data_export_ready",
     "account_deletion_grace_started",
@@ -324,6 +325,26 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("sender_name", "dispute_title", "dispute_url"),
+    ),
+    "couples_dispute_perspective_added": Template(
+        name="couples_dispute_perspective_added",
+        subject="{{ partner_name }} answered your dispute: {{ dispute_title }}",
+        html=_wrap(
+            "<h1 style='margin-top:0'>{{ partner_name }} answered.</h1>"
+            "<p><strong>Subject:</strong> {{ dispute_title }}</p>"
+            "<p>Both sides are in. Quarrel is weighing them — you'll get the "
+            "verdict in a minute or two.</p>"
+            "<p><a href='{{ dispute_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Open the dispute</a></p>"
+        ),
+        text=(
+            "{{ partner_name }} added their side to '{{ dispute_title }}'.\n\n"
+            "Verdict coming. Open: {{ dispute_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("partner_name", "dispute_title", "dispute_url"),
     ),
     "couples_dispute_arbitrated": Template(
         name="couples_dispute_arbitrated",

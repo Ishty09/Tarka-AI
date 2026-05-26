@@ -27,6 +27,10 @@
       "body": "Asunto: {dispute_title}. Tu versión desbloquea el veredicto.",
       "title": "{sender_name} acaba de abrir una disputa."
     },
+    "couples_dispute_perspective_added": {
+      "body": "Quarrel está pesando ambos lados de \"{dispute_title}\".",
+      "title": "{partner_name} respondió a tu disputa."
+    },
     "couples_invite": {
       "body": "Toca para aceptar el vínculo Quarrel de parejas.",
       "title": "{partner_name} quiere discutir contigo (sanamente)."

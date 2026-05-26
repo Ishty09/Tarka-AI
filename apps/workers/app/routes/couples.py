@@ -390,6 +390,126 @@ async def notify_dispute_created(
     return NotifyResponse(ok=True, delivered=delivered)
 
 
+# ----- Notify creator when partner adds their perspective ------------------
+
+
+@router.post(
+    "/disputes/{dispute_id}/notify-perspective-added",
+    response_model=NotifyResponse,
+    dependencies=[Depends(_verify_internal_caller)],
+)
+async def notify_perspective_added(
+    dispute_id: str = Path(..., min_length=36, max_length=36),
+) -> NotifyResponse:
+    """Fire push + email to the original creator when the second
+    perspective arrives, signalling that the arbitration LLM is now
+    running. Idempotent on dispute_id.
+
+    Determines who the "creator" is by comparing submitted_at on the
+    two perspective slots — earlier timestamp wins. Both timestamps
+    must be set; if either is missing we treat it as a no-op so a
+    misfire during the single-perspective phase can't surprise anyone.
+    """
+
+    supabase = await get_supabase()
+
+    row = row_or_none(
+        await (
+            supabase.table("couple_disputes")
+            .select(
+                "id, couple_link_id, title, "
+                "perspective_a_user_id, perspective_a_submitted_at, "
+                "perspective_b_user_id, perspective_b_submitted_at"
+            )
+            .eq("id", dispute_id)
+            .single()
+            .execute()
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "dispute not found")
+
+    a_at = row.get("perspective_a_submitted_at")
+    b_at = row.get("perspective_b_submitted_at")
+    a_uid = row.get("perspective_a_user_id")
+    b_uid = row.get("perspective_b_user_id")
+    if not (a_at and b_at and a_uid and b_uid):
+        # Only one side in — nothing to notify yet.
+        return NotifyResponse(ok=True, delivered={"push": False, "email": False})
+
+    # Earlier timestamp = creator (the one waiting). Later = answerer.
+    if a_at <= b_at:
+        creator_id, answerer_id = a_uid, b_uid
+    else:
+        creator_id, answerer_id = b_uid, a_uid
+
+    answerer_profile = row_or_none(
+        await (
+            supabase.table("profiles")
+            .select("display_name, username")
+            .eq("id", answerer_id)
+            .single()
+            .execute()
+        )
+    )
+    partner_name = "Your partner"
+    if answerer_profile:
+        partner_name = (
+            answerer_profile.get("display_name")
+            or answerer_profile.get("username")
+            or partner_name
+        )
+
+    settings = get_settings()
+    dispute_url = (
+        f"{str(settings.app_url).rstrip('/')}"
+        f"/couples/{row['couple_link_id']}/disputes/{dispute_id}"
+    )
+    title = row.get("title") or "(untitled)"
+
+    delivered = {"push": False, "email": False}
+
+    try:
+        results = await deliver_to_user(
+            user_id=creator_id,
+            template="couples_dispute_perspective_added",
+            variables={"partner_name": partner_name, "dispute_title": title},
+            deep_link=dispute_url,
+            idempotency_key=f"push:couples_dispute_perspective_added:{dispute_id}",
+            supabase=supabase,
+        )
+        delivered["push"] = any(r.status in ("sent", "dry_run") for r in results)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning("couples.notify.persp_push_failed", dispute_id=dispute_id, error=str(err))
+
+    creator_email = await _resolve_email(supabase, creator_id)
+    if creator_email:
+        try:
+            await send_email(
+                template="couples_dispute_perspective_added",
+                to_email=creator_email,
+                variables={
+                    "partner_name": partner_name,
+                    "dispute_title": title,
+                    "dispute_url": dispute_url,
+                },
+                user_id=creator_id,
+                idempotency_key=f"email:couples_dispute_perspective_added:{dispute_id}",
+                supabase=supabase,
+            )
+            delivered["email"] = True
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning("couples.notify.persp_email_failed", dispute_id=dispute_id, error=str(err))
+
+    log.info(
+        "couples.perspective_added.notified",
+        dispute_id=dispute_id,
+        creator_id=creator_id,
+        delivered=delivered,
+    )
+    return NotifyResponse(ok=True, delivered=delivered)
+
+
 # ----- Notify both partners when arbitration completes ---------------------
 
 

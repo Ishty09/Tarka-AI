@@ -27,6 +27,10 @@
       "body": "الموضوع: {dispute_title}. وجهة نظرك هي ما يفتح الحكم.",
       "title": "‏{sender_name} فتح نزاعًا للتو."
     },
+    "couples_dispute_perspective_added": {
+      "body": "‏Quarrel يزن الجانبين بشأن \"{dispute_title}\".",
+      "title": "‏{partner_name} رد على نزاعك."
+    },
     "couples_invite": {
       "body": "اضغط لقبول رابط الأزواج في Quarrel.",
       "title": "‏{partner_name} يريد أن يتجادل معك (بطريقة صحية)."

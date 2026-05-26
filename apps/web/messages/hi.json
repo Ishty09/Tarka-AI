@@ -27,6 +27,10 @@
       "body": "विषय: {dispute_title}। आपका पक्ष आए बिना फैसला अटका है।",
       "title": "{sender_name} ने एक विवाद खोला है।"
     },
+    "couples_dispute_perspective_added": {
+      "body": "Quarrel \"{dispute_title}\" पर दोनों पक्षों को तौल रहा है।",
+      "title": "{partner_name} ने आपके विवाद का जवाब दिया।"
+    },
     "couples_invite": {
       "body": "Quarrel कपल्स लिंक स्वीकार करने के लिए टैप करें।",
       "title": "{partner_name} आपसे (स्वस्थ तरीके से) बहस करना चाहते हैं।"
