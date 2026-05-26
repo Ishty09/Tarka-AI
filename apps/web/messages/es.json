@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "Te contradijiste."
     },
+    "couples_dispute_arbitrated": {
+      "body": "Quarrel pesó ambos lados de \"{dispute_title}\".",
+      "title": "El veredicto está listo."
+    },
     "couples_dispute_created": {
       "body": "Asunto: {dispute_title}. Tu versión desbloquea el veredicto.",
       "title": "{sender_name} acaba de abrir una disputa."

@@ -56,6 +56,7 @@ TemplateName = Literal[
     "wager_lost",
     "couples_invite",
     "couples_dispute_created",
+    "couples_dispute_arbitrated",
     "data_export_ready",
     "account_deletion_grace_started",
     "emergency_contact_notification",
@@ -323,6 +324,28 @@ TEMPLATES: dict[TemplateName, Template] = {
         ),
         transactional=True,
         required_vars=("sender_name", "dispute_title", "dispute_url"),
+    ),
+    "couples_dispute_arbitrated": Template(
+        name="couples_dispute_arbitrated",
+        subject="The verdict is in: {{ dispute_title }}",
+        html=_wrap(
+            "<h1 style='margin-top:0'>The verdict is in.</h1>"
+            "<p>Quarrel weighed both sides on "
+            "<strong>{{ dispute_title }}</strong> and rendered a verdict.</p>"
+            "<p>It won't tell you who's right — that's not the job. It will "
+            "tell you which parts of each side hold up and which don't.</p>"
+            "<p><a href='{{ dispute_url }}' style='display:inline-block;"
+            "background:#fafafa;color:#0a0a0a;padding:12px 24px;"
+            "border-radius:8px;text-decoration:none;font-weight:500'>"
+            "Read the verdict</a></p>"
+        ),
+        text=(
+            "The verdict is in on '{{ dispute_title }}'.\n\n"
+            "Quarrel weighed both sides. Read the verdict:\n"
+            "{{ dispute_url }}\n"
+        ),
+        transactional=True,
+        required_vars=("dispute_title", "dispute_url"),
     ),
     "data_export_ready": Template(
         name="data_export_ready",

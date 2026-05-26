@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "তুমি নিজেই নিজের কথা কাটলে।"
     },
+    "couples_dispute_arbitrated": {
+      "body": "Quarrel \"{dispute_title}\" নিয়ে দুই দিকই বিচার করেছে।",
+      "title": "রায় এসেছে।"
+    },
     "couples_dispute_created": {
       "body": "বিষয়: {dispute_title}। তোমার দিকটা না এলে রায় আটকে আছে।",
       "title": "{sender_name} একটা মতবিরোধ তুলেছে।"

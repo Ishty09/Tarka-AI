@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "आपने खुद का विरोध किया।"
     },
+    "couples_dispute_arbitrated": {
+      "body": "Quarrel ने \"{dispute_title}\" पर दोनों पक्षों को तौला।",
+      "title": "फैसला आ गया।"
+    },
     "couples_dispute_created": {
       "body": "विषय: {dispute_title}। आपका पक्ष आए बिना फैसला अटका है।",
       "title": "{sender_name} ने एक विवाद खोला है।"

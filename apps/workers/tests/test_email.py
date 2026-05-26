@@ -128,6 +128,10 @@ SAMPLE_VARS: dict[str, dict[str, Any]] = {
         "dispute_title": "Sunday night fight about money",
         "dispute_url": "https://quarrel.test/couples/abc/disputes/xyz",
     },
+    "couples_dispute_arbitrated": {
+        "dispute_title": "Sunday night fight about money",
+        "dispute_url": "https://quarrel.test/couples/abc/disputes/xyz",
+    },
     "data_export_ready": {
         "download_url": "https://quarrel.test/exports/abc",
         "ttl_hours": 24,

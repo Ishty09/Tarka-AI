@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "You contradicted yourself."
     },
+    "couples_dispute_arbitrated": {
+      "body": "Quarrel weighed both sides on \"{dispute_title}\".",
+      "title": "The verdict is in."
+    },
     "couples_dispute_created": {
       "body": "Subject: {dispute_title}. Your perspective unblocks the verdict.",
       "title": "{sender_name} just opened a dispute."

@@ -19,6 +19,10 @@
       "body": "{summary}",
       "title": "ناقضت نفسك."
     },
+    "couples_dispute_arbitrated": {
+      "body": "وزن Quarrel كلا الجانبين بشأن \"{dispute_title}\".",
+      "title": "صدر الحكم."
+    },
     "couples_dispute_created": {
       "body": "الموضوع: {dispute_title}. وجهة نظرك هي ما يفتح الحكم.",
       "title": "‏{sender_name} فتح نزاعًا للتو."

@@ -62,7 +62,7 @@ async def arbitrate_dispute(
         await (
             supabase.table("couple_disputes")
             .select(
-                "id, couple_link_id, status, "
+                "id, couple_link_id, status, title, "
                 "perspective_a_text, perspective_a_user_id, perspective_a_submitted_at, "
                 "perspective_b_text, perspective_b_user_id, perspective_b_submitted_at, "
                 "arbitration"
@@ -141,6 +141,22 @@ async def arbitrate_dispute(
         confidence=result.verdict.get("confidence"),
         who_escalated=result.verdict.get("who_escalated_first"),
     )
+
+    # Notify both partners. Best-effort — failures don't change the
+    # arbitration result we return.
+    try:
+        await _notify_dispute_arbitrated(
+            supabase,
+            dispute_id=dispute_id,
+            couple_link_id=row["couple_link_id"],
+            dispute_title=row.get("title") or "(untitled)",
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "dispute.arbitrated_notify_failed",
+            dispute_id=dispute_id,
+            error=str(err),
+        )
 
     return ArbitrateResponse(
         ok=True, status="arbitrated", verdict=result.verdict
@@ -372,3 +388,91 @@ async def notify_dispute_created(
         delivered=delivered,
     )
     return NotifyResponse(ok=True, delivered=delivered)
+
+
+# ----- Notify both partners when arbitration completes ---------------------
+
+
+async def _resolve_email(supabase: Any, user_id: str) -> str | None:
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info("couples.email_lookup_failed", user_id=user_id, error=str(err))
+        return None
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    return email_val if isinstance(email_val, str) and email_val else None
+
+
+async def _notify_dispute_arbitrated(
+    supabase: Any,
+    *,
+    dispute_id: str,
+    couple_link_id: str,
+    dispute_title: str,
+) -> None:
+    """Push + email to BOTH partners when the verdict lands.
+
+    Idempotency keys are per-user so retries don't double-notify either
+    side. Per-channel try/except keeps a single broken delivery from
+    sinking the others.
+    """
+
+    link = row_or_none(
+        await (
+            supabase.table("couple_links")
+            .select("user_a, user_b")
+            .eq("id", couple_link_id)
+            .single()
+            .execute()
+        )
+    )
+    if link is None:
+        return
+
+    settings = get_settings()
+    dispute_url = (
+        f"{str(settings.app_url).rstrip('/')}"
+        f"/couples/{couple_link_id}/disputes/{dispute_id}"
+    )
+
+    for user_id in (link.get("user_a"), link.get("user_b")):
+        if not user_id:
+            continue
+        try:
+            await deliver_to_user(
+                user_id=user_id,
+                template="couples_dispute_arbitrated",
+                variables={"dispute_title": dispute_title},
+                deep_link=dispute_url,
+                idempotency_key=f"push:couples_dispute_arbitrated:{dispute_id}:{user_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "couples.arbitrated_notify.push_failed",
+                user_id=user_id,
+                error=str(err),
+            )
+
+        email_addr = await _resolve_email(supabase, user_id)
+        if not email_addr:
+            continue
+        try:
+            await send_email(
+                template="couples_dispute_arbitrated",
+                to_email=email_addr,
+                variables={
+                    "dispute_title": dispute_title,
+                    "dispute_url": dispute_url,
+                },
+                user_id=user_id,
+                idempotency_key=f"email:couples_dispute_arbitrated:{dispute_id}:{user_id}",
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "couples.arbitrated_notify.email_failed",
+                user_id=user_id,
+                error=str(err),
+            )
