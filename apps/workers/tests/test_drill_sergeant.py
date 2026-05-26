@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from app.services import drill_sergeant as drill_sergeant_mod
 from app.services.drill_sergeant import (
     MIN_ROAST_CHARS,
     StreakCandidate,
@@ -319,3 +320,80 @@ async def test_run_today_delivers_to_eligible_streak() -> None:
         supabase=sb,  # type: ignore[arg-type]
     )
     assert result == {"candidates": 1, "delivered": 1, "skipped": 0}
+
+
+# ----- Push fire ----------------------------------------------------------
+
+
+async def test_deliver_fires_push_with_roast_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The in-app message alone is invisible if the user doesn't open the
+    app. Verify deliver() also calls deliver_to_user with the streak_punish
+    template and the actual roast in the body, plus an idempotency key
+    that matches the dedupe shape (streak_id + tier + break-start).
+    """
+
+    sb = FakeSupabase()
+    sb.seed_host()
+    sb.seed_streak(streak_id=7, last="2026-05-12")
+
+    push_calls: list[dict[str, Any]] = []
+
+    async def fake_deliver_to_user(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        drill_sergeant_mod, "deliver_to_user", fake_deliver_to_user
+    )
+
+    llm = FakeLLM(content=GOOD_ROAST)
+    out = await deliver(
+        sb,  # type: ignore[arg-type]
+        candidate=_candidate(tier=3, streak_id=7, last="2026-05-12"),
+        client=llm,  # type: ignore[arg-type]
+    )
+    assert out is not None
+    assert len(push_calls) == 1
+    call = push_calls[0]
+    assert call["template"] == "streak_punish"
+    assert call["variables"] == {
+        "days_missed": 3,
+        "drill_sergeant_message": GOOD_ROAST,
+    }
+    # Deep link points at the user's drill sergeant conversation so the
+    # tap target is the chat, not a generic landing page.
+    assert "/chat/" in call["deep_link"]
+    # Idempotency key matches the dedupe shape — streak_id + tier +
+    # break-start. A cron retry on the same day can't double-fire.
+    assert call["idempotency_key"] == "push:streak_punish:7:3:2026-05-12"
+
+
+async def test_deliver_push_failure_does_not_drop_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken push channel must not roll back the in-app message —
+    the user should still see the roast next time they open the app.
+    """
+
+    sb = FakeSupabase()
+    sb.seed_host()
+
+    async def boom(**_kwargs: Any) -> list[Any]:
+        raise RuntimeError("push pipeline is down")
+
+    monkeypatch.setattr(drill_sergeant_mod, "deliver_to_user", boom)
+
+    llm = FakeLLM(content=GOOD_ROAST)
+    out = await deliver(
+        sb,  # type: ignore[arg-type]
+        candidate=_candidate(tier=7, streak_id=11, last="2026-05-12"),
+        client=llm,  # type: ignore[arg-type]
+    )
+    assert out is not None
+    # Message landed in the conversation even though push failed.
+    drill_msgs = [
+        m for m in sb.table("messages").rows
+        if isinstance(m.get("metadata"), dict)
+        and m["metadata"].get("kind") == "drill_sergeant"
+    ]
+    assert len(drill_msgs) == 1

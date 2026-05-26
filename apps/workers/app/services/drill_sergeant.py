@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 from supabase import AsyncClient
 
+from app.config import get_settings
 from app.prompts.drill_sergeant import ESCALATION_TIERS, TIER_PROMPTS
 from app.services._db_typing import row_or_none, rows as _rows
 from app.services.langfuse_trace import build_metadata as build_trace_metadata
@@ -28,6 +29,7 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -338,6 +340,37 @@ async def deliver(
     )
     if message_id is None:
         return None
+
+    # Push notification — the in-app message alone is invisible to a user
+    # who hasn't opened the app, which defeats the entire "punishment"
+    # contract (§9.5.4). Best-effort: a push failure doesn't roll back
+    # the persisted message. Idempotency key matches the dedupe shape
+    # (streak_id + tier + break-start) so a cron retry can't double-fire.
+    app_url = str(get_settings().app_url).rstrip("/")
+    deep_link = f"{app_url}/chat/{conversation_id}"
+    try:
+        await deliver_to_user(
+            user_id=candidate.user_id,
+            template="streak_punish",
+            variables={
+                "days_missed": candidate.tier,
+                "drill_sergeant_message": text,
+            },
+            deep_link=deep_link,
+            idempotency_key=(
+                f"push:streak_punish:{candidate.streak_id}:"
+                f"{candidate.tier}:{candidate.last_checkin_at.isoformat()}"
+            ),
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "drill_sergeant.push_failed",
+            streak_id=candidate.streak_id,
+            tier=candidate.tier,
+            error=str(err),
+        )
+
     return DrillRun(
         streak_id=candidate.streak_id,
         tier=candidate.tier,
