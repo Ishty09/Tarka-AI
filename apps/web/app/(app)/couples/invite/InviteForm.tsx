@@ -53,8 +53,8 @@ export function InviteForm() {
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          One-shot link · expires in 7 days. We don&apos;t send it for you — paste
-          it into whichever chat you already use.
+          One-shot link · expires in 7 days. If you added their email above,
+          we also emailed it directly.
         </p>
         <div className="flex gap-2">
           <Link
@@ -80,6 +80,22 @@ export function InviteForm() {
         Ready when you are. By clicking, you&apos;re saying yes to a shared
         chat with one other person; they have to accept on their side.
       </p>
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">
+          Partner&apos;s email <span className="text-muted-foreground">(optional)</span>
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Leave blank to share the link yourself over WhatsApp / iMessage / etc.
+        </span>
+        <input
+          type="email"
+          name="partner_email"
+          maxLength={254}
+          autoComplete="email"
+          placeholder="them@example.com"
+          className="mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </label>
       {state?.ok === false && (
         <p role="alert" className="text-sm text-destructive">{state.error}</p>
       )}

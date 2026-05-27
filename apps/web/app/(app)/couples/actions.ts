@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { type Tier } from "@quarrel/shared/constants";
 import { hashUserId, trackServer } from "@/lib/analytics";
+import { serverEnv } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { activeCoupleLimitFor, generateInviteCode, inviteExpiry } from "@/lib/couples";
 
@@ -16,10 +17,28 @@ export type ActionResult = { ok: true; payload?: unknown } | { ok: false; error:
 
 // ----- Create invite (§9.3.1 step 1) ----------------------------------------
 
+const createInviteSchema = z.object({
+  partner_email: z
+    .string()
+    .trim()
+    .max(254)
+    .email("Enter a valid email.")
+    .or(z.literal(""))
+    .optional(),
+});
+
 export async function createInvite(
   _prev: ActionResult | null,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionResult> {
+  const parsed = createInviteSchema.safeParse({
+    partner_email: (formData.get("partner_email") ?? "").toString(),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const partnerEmail = parsed.data.partner_email?.trim() || null;
+
   const supabase = await createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -71,11 +90,38 @@ export async function createInvite(
   }
 
   await trackServer("couple_link_created", { user_id: hashUserId(user.id) });
+
+  // Fire-and-forget partner email if the creator chose to send one.
+  // Out-of-band sharing (WhatsApp / iMessage / Signal) remains the
+  // default — this is just an alternate channel.
+  if (partnerEmail) {
+    void emailCoupleInvite(insertedRow.id, partnerEmail);
+  }
+
   revalidatePath("/couples");
   return {
     ok: true,
     payload: { link_id: insertedRow.id, invite_code: insertedRow.invite_code },
   };
+}
+
+async function emailCoupleInvite(
+  linkId: string,
+  partnerEmail: string,
+): Promise<void> {
+  if (!serverEnv.WORKERS_URL || !serverEnv.WORKERS_INTERNAL_SECRET) return;
+  try {
+    await fetch(`${serverEnv.WORKERS_URL}/couples/invites/${linkId}/email`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ partner_email: partnerEmail }),
+    });
+  } catch {
+    // Best-effort: the user still has the shareable link to copy.
+  }
 }
 
 // ----- Accept invite (§9.3.1 step 3) ---------------------------------------

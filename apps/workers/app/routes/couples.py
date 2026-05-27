@@ -10,6 +10,7 @@ trust boundary that delegates here via WORKERS_INTERNAL_SECRET.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Annotated, Any
 
 import structlog
@@ -663,3 +664,109 @@ async def _notify_prep_ready(
         log.warning(
             "couples.prep_ready.email_failed", prep_id=prep_id, error=str(err)
         )
+
+
+# ----- Email an invite to the partner --------------------------------------
+
+
+class EmailInviteRequest(BaseModel):
+    partner_email: str
+
+
+class EmailInviteResponse(BaseModel):
+    ok: bool
+    sent: bool
+
+
+@router.post(
+    "/invites/{link_id}/email",
+    response_model=EmailInviteResponse,
+    dependencies=[Depends(_verify_internal_caller)],
+)
+async def email_couple_invite(
+    body: EmailInviteRequest,
+    link_id: str = Path(..., min_length=36, max_length=36),
+) -> EmailInviteResponse:
+    """Send the couples_invite email to a partner the creator named.
+
+    The web action creates the link with status='pending' and an
+    invite_code, then fires this endpoint fire-and-forget. We re-load
+    the link to get the canonical code + expires_at so a tampered web
+    payload can't smuggle stale data.
+
+    Idempotency: keyed on (link_id, partner_email). Re-issuing the
+    same invite to the same email is a no-op.
+    """
+
+    supabase = await get_supabase()
+
+    link = row_or_none(
+        await (
+            supabase.table("couple_links")
+            .select("id, user_a, status, invite_code, invite_expires_at")
+            .eq("id", link_id)
+            .single()
+            .execute()
+        )
+    )
+    if link is None or link.get("status") != "pending":
+        raise HTTPException(status.HTTP_409_CONFLICT, "invite not pending")
+    invite_code = link.get("invite_code")
+    if not isinstance(invite_code, str) or not invite_code:
+        raise HTTPException(status.HTTP_409_CONFLICT, "invite already burned")
+
+    # Inviter name — prefer display_name, fall back to username, then a
+    # neutral placeholder so the email subject still reads naturally.
+    inviter_profile = row_or_none(
+        await (
+            supabase.table("profiles")
+            .select("display_name, username")
+            .eq("id", link["user_a"])
+            .single()
+            .execute()
+        )
+    )
+    inviter_name = "Someone you know"
+    if inviter_profile:
+        inviter_name = (
+            inviter_profile.get("display_name")
+            or inviter_profile.get("username")
+            or inviter_name
+        )
+
+    settings = get_settings()
+    accept_url = (
+        f"{str(settings.app_url).rstrip('/')}/couples/join/{invite_code}"
+    )
+    expires_raw = link.get("invite_expires_at") or ""
+    # Show just the date portion (YYYY-MM-DD) so the email reads cleanly.
+    expires_at = str(expires_raw)[:10] if expires_raw else "soon"
+
+    # Hash the partner_email into the idempotency key so re-running the
+    # cron / a double-click doesn't double-send to the same partner,
+    # but the creator CAN re-issue to a different email if they typo'd
+    # the first try.
+    email_hash = hashlib.sha256(
+        body.partner_email.lower().strip().encode()
+    ).hexdigest()[:16]
+
+    try:
+        await send_email(
+            template="couples_invite",
+            to_email=body.partner_email,
+            variables={
+                "inviter_name": inviter_name,
+                "accept_url": accept_url,
+                "expires_at": expires_at,
+            },
+            user_id=link["user_a"],
+            idempotency_key=f"email:couples_invite:{link_id}:{email_hash}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "couples.invite_email.failed", link_id=link_id, error=str(err)
+        )
+        return EmailInviteResponse(ok=False, sent=False)
+
+    return EmailInviteResponse(ok=True, sent=True)
