@@ -7,13 +7,23 @@ run_for_user happy path.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 
+os.environ.setdefault("NEXT_PUBLIC_APP_URL", "https://quarrel.test")
+os.environ.setdefault("LITELLM_PROXY_URL", "https://litellm.test")
+os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
+
+from app.services import eulogy as eulogy_mod
 from app.services.eulogy import (
     MIN_CONTENT_CHARS,
+    _notify_eulogy_ready,
     generate_eulogy_text,
     persist_eulogy,
     previous_quarter_window,
@@ -332,6 +342,46 @@ async def test_run_for_user_inserts_on_happy_path() -> None:
 
 
 # ----- run_quarter tier gating ---------------------------------------------
+
+
+async def test_notify_eulogy_ready_fires_push_and_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Push (eulogy_ready, with the quarter slug substituted into the
+    title) AND email (eulogy_ready) when a fresh eulogy lands.
+    """
+
+    push_calls: list[dict[str, Any]] = []
+    email_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return [type("R", (), {"status": "sent"})()]
+
+    async def fake_email(**kwargs: Any) -> Any:
+        email_calls.append(kwargs)
+        return type("R", (), {"status": "sent"})()
+
+    async def fake_resolve_email(_sb: Any, *, user_id: str) -> str:
+        return f"{user_id}@example.test"
+
+    monkeypatch.setattr(eulogy_mod, "deliver_to_user", fake_push)
+    monkeypatch.setattr(eulogy_mod, "send_email", fake_email)
+    monkeypatch.setattr(eulogy_mod, "_resolve_email", fake_resolve_email)
+
+    await _notify_eulogy_ready(object(), user_id="u-eulogy", quarter="2026-Q1")  # type: ignore[arg-type]
+
+    assert len(push_calls) == 1
+    pcall = push_calls[0]
+    assert pcall["template"] == "eulogy_ready"
+    assert pcall["variables"] == {"quarter": "2026-Q1"}
+    assert pcall["idempotency_key"] == "push:eulogy_ready:u-eulogy:2026-Q1"
+
+    assert len(email_calls) == 1
+    ecall = email_calls[0]
+    assert ecall["template"] == "eulogy_ready"
+    assert ecall["variables"] == {"quarter": "2026-Q1"}
+    assert ecall["idempotency_key"] == "email:eulogy_ready:u-eulogy:2026-Q1"
 
 
 async def test_run_quarter_skips_free_tier() -> None:

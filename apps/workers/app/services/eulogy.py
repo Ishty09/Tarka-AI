@@ -20,6 +20,7 @@ from supabase import AsyncClient
 
 from app.prompts.eulogy import EULOGY_PROMPT
 from app.services._db_typing import rows as _rows
+from app.services.email import send_email
 from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -28,6 +29,7 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -333,7 +335,78 @@ async def run_for_user(
             user_id=user_id, quarter=quarter, inserted=False, reason="already_exists"
         )
 
+    # Best-effort: notify the user the eulogy is ready. The unique index
+    # on (user_id, quarter) means we only reach here when a NEW row
+    # actually landed, so dedupe at the persist layer also prevents
+    # double-notification on cron retries.
+    try:
+        await _notify_eulogy_ready(supabase, user_id=user_id, quarter=quarter)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "eulogy.notify_failed",
+            user_id=user_id,
+            quarter=quarter,
+            error=str(err),
+        )
+
     return GenerationResult(user_id=user_id, quarter=quarter, inserted=True)
+
+
+async def _resolve_email(
+    supabase: AsyncClient, *, user_id: str
+) -> str | None:
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info("eulogy.email_lookup_failed", user_id=user_id, error=str(err))
+        return None
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    return email_val if isinstance(email_val, str) and email_val else None
+
+
+async def _notify_eulogy_ready(
+    supabase: AsyncClient,
+    *,
+    user_id: str,
+    quarter: str,
+) -> None:
+    """Push + email when a fresh eulogy lands. Per-event idempotency is
+    via the (user_id, quarter) shape — eulogy_reports has UNIQUE on it
+    already so we naturally never re-fire.
+    """
+
+    # Push body has no variables, but the title carries `{quarter}`.
+    try:
+        await deliver_to_user(
+            user_id=user_id,
+            template="eulogy_ready",
+            variables={"quarter": quarter},
+            deep_link=None,
+            idempotency_key=f"push:eulogy_ready:{user_id}:{quarter}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "eulogy.push_failed", user_id=user_id, quarter=quarter, error=str(err)
+        )
+
+    email_addr = await _resolve_email(supabase, user_id=user_id)
+    if not email_addr:
+        return
+    try:
+        await send_email(
+            template="eulogy_ready",
+            to_email=email_addr,
+            variables={"quarter": quarter},
+            user_id=user_id,
+            idempotency_key=f"email:eulogy_ready:{user_id}:{quarter}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "eulogy.email_failed", user_id=user_id, quarter=quarter, error=str(err)
+        )
 
 
 async def find_eligible_users(

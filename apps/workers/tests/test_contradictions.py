@@ -8,11 +8,20 @@ LLM-judge → insert flow.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 
+os.environ.setdefault("NEXT_PUBLIC_APP_URL", "https://quarrel.test")
+os.environ.setdefault("LITELLM_PROXY_URL", "https://litellm.test")
+os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
+
+from app.services import contradictions as contradictions_mod
 from app.services.contradictions import (
     DEFAULT_SEVERITY_THRESHOLD,
     ContradictionJudgment,
@@ -389,3 +398,124 @@ async def test_run_for_user_skips_facts_without_embedding() -> None:
     result = await run_for_user(sb, user_id="u", since=since, client=llm)  # type: ignore[arg-type]
     assert result == {"new_facts": 0, "pairs_judged": 0, "contradictions_inserted": 0}
     assert llm.calls == []
+
+
+# ----- Push fire ----------------------------------------------------------
+
+
+async def test_run_for_user_fires_one_push_with_top_severity_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If multiple contradictions clear the threshold in a single run,
+    fire exactly ONE push and use the HIGHEST-severity summary so the
+    user sees the most actionable one. Click-through to the Wall shows
+    them all anyway.
+    """
+
+    sb = FakeSupabase()
+    since = datetime.now(UTC) - timedelta(hours=24)
+    later = (since + timedelta(hours=1)).isoformat()
+
+    # Two new facts; each will get one candidate match. First insert is
+    # mild, second is severe — the push body should carry the severe one.
+    sb.table("user_facts").rows.extend(
+        [
+            {
+                "id": 100,
+                "user_id": "u",
+                "fact": "fact one",
+                "embedding": [0.1] * 1536,
+                "is_active": True,
+                "created_at": later,
+            },
+            {
+                "id": 101,
+                "user_id": "u",
+                "fact": "fact two",
+                "embedding": [0.1] * 1536,
+                "is_active": True,
+                "created_at": later,
+            },
+        ]
+    )
+    sb.rpc_results["match_user_facts"] = [
+        {"id": 50, "fact": "candidate"},
+    ]
+
+    llm = FakeLLM(
+        responses=[
+            {
+                "is_contradiction": True,
+                "severity": DEFAULT_SEVERITY_THRESHOLD,
+                "summary": "Mild — barely above the bar.",
+            },
+            {
+                "is_contradiction": True,
+                "severity": DEFAULT_SEVERITY_THRESHOLD + 3,
+                "summary": "Severe — this is the one to surface.",
+            },
+        ]
+    )
+
+    push_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return [type("R", (), {"status": "sent"})()]
+
+    monkeypatch.setattr(contradictions_mod, "deliver_to_user", fake_push)
+
+    result = await run_for_user(sb, user_id="u", since=since, client=llm)  # type: ignore[arg-type]
+    assert result["contradictions_inserted"] == 2
+
+    assert len(push_calls) == 1
+    call = push_calls[0]
+    assert call["template"] == "contradiction"
+    assert call["variables"] == {"summary": "Severe — this is the one to surface."}
+    # Key shape includes user_id + since's date so a same-day retry
+    # dedupes but tomorrow's batch fires fresh.
+    assert call["idempotency_key"].startswith("push:contradiction:u:")
+
+
+async def test_run_for_user_no_inserts_means_no_push(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When all candidates fall below the threshold (or aren't real
+    contradictions), no push fires. The user shouldn't get pinged for
+    a quiet batch.
+    """
+
+    sb = FakeSupabase()
+    since = datetime.now(UTC) - timedelta(hours=24)
+    later = (since + timedelta(hours=1)).isoformat()
+    sb.table("user_facts").rows.append(
+        {
+            "id": 1,
+            "user_id": "u",
+            "fact": "fact",
+            "embedding": [0.1] * 1536,
+            "is_active": True,
+            "created_at": later,
+        }
+    )
+    sb.rpc_results["match_user_facts"] = [{"id": 2, "fact": "candidate"}]
+    llm = FakeLLM(
+        responses=[
+            {
+                "is_contradiction": True,
+                "severity": DEFAULT_SEVERITY_THRESHOLD - 1,
+                "summary": "below threshold",
+            }
+        ]
+    )
+
+    push_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(contradictions_mod, "deliver_to_user", fake_push)
+
+    await run_for_user(sb, user_id="u", since=since, client=llm)  # type: ignore[arg-type]
+    assert push_calls == []

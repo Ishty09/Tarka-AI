@@ -36,6 +36,7 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -243,6 +244,11 @@ async def run_for_user(
     pairs_judged = 0
     contradictions_inserted = 0
     pairs_skipped = 0
+    # Track top-severity insert this run so we fire exactly ONE push at
+    # the end. Multiple contradictions in a single nightly batch would
+    # otherwise spam — the user clicks through to /contradictions and
+    # sees the full list anyway.
+    top_insert: tuple[int, str] | None = None  # (severity, summary)
 
     for new_fact in new_facts:
         if pairs_judged >= max_pairs:
@@ -282,6 +288,30 @@ async def run_for_user(
                     user_id=user_id,
                     data={"severity": verdict.severity},
                 )
+                if top_insert is None or verdict.severity > top_insert[0]:
+                    top_insert = (verdict.severity, verdict.summary)
+
+    # Best-effort: one push for the highest-severity contradiction. The
+    # idempotency key includes the `since` date so a same-day cron retry
+    # dedupes but tomorrow's batch fires fresh.
+    if top_insert is not None:
+        try:
+            await deliver_to_user(
+                user_id=user_id,
+                template="contradiction",
+                variables={"summary": top_insert[1]},
+                deep_link=None,
+                idempotency_key=(
+                    f"push:contradiction:{user_id}:{since.date().isoformat()}"
+                ),
+                supabase=supabase,
+            )
+        except Exception as err:  # pragma: no cover - non-fatal
+            log.warning(
+                "contradictions.push_failed",
+                user_id=user_id,
+                error=str(err),
+            )
 
     log.info(
         "contradictions.user.done",

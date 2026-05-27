@@ -7,14 +7,24 @@ LLM failure, tier gating, idempotency, and the JSON parse failure path.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 
+os.environ.setdefault("NEXT_PUBLIC_APP_URL", "https://quarrel.test")
+os.environ.setdefault("LITELLM_PROXY_URL", "https://litellm.test")
+os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
+os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
+
+from app.services import mirror as mirror_mod
 from app.services.llm import LiteLLMError, LiteLLMNetworkError
 from app.services.mirror import (
     MirrorReportPayload,
+    _notify_mirror_ready,
     generate_report,
     persist_report,
     run_for_user,
@@ -342,3 +352,49 @@ async def test_run_weekly_handles_no_eligible_users() -> None:
     )
     assert result == {"eligible_users": 0, "inserted": 0, "skipped": 0}
     assert llm.calls == []
+
+
+async def test_notify_mirror_ready_fires_push_and_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Push uses template `mirror_ready` (no variables, no deep link);
+    email uses the historically-named `mirror_report_ready` with a
+    week_label variable. Both keyed per (user_id, period_start) so a
+    same-period retry dedupes.
+    """
+
+    push_calls: list[dict[str, Any]] = []
+    email_calls: list[dict[str, Any]] = []
+
+    async def fake_push(**kwargs: Any) -> list[Any]:
+        push_calls.append(kwargs)
+        return [type("R", (), {"status": "sent"})()]
+
+    async def fake_email(**kwargs: Any) -> Any:
+        email_calls.append(kwargs)
+        return type("R", (), {"status": "sent"})()
+
+    async def fake_resolve_email(_sb: Any, *, user_id: str) -> str:
+        return f"{user_id}@example.test"
+
+    monkeypatch.setattr(mirror_mod, "deliver_to_user", fake_push)
+    monkeypatch.setattr(mirror_mod, "send_email", fake_email)
+    monkeypatch.setattr(mirror_mod, "_resolve_email", fake_resolve_email)
+
+    await _notify_mirror_ready(
+        object(),  # type: ignore[arg-type]
+        user_id="u-mirror",
+        period_start=PERIOD_START.date(),
+    )
+
+    assert len(push_calls) == 1
+    pcall = push_calls[0]
+    assert pcall["template"] == "mirror_ready"
+    assert pcall["variables"] == {}
+    assert pcall["idempotency_key"] == "push:mirror_ready:u-mirror:2026-05-10"
+
+    assert len(email_calls) == 1
+    ecall = email_calls[0]
+    assert ecall["template"] == "mirror_report_ready"
+    assert ecall["variables"]["week_label"] == "2026-05-10"
+    assert ecall["idempotency_key"] == "email:mirror_report_ready:u-mirror:2026-05-10"

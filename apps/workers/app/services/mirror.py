@@ -22,6 +22,7 @@ from supabase import AsyncClient
 
 from app.prompts.mirror_mode import MIRROR_MODE_PROMPT
 from app.services._db_typing import rows as _rows
+from app.services.email import send_email
 from app.services.langfuse_trace import build_metadata as build_trace_metadata
 from app.services.llm import (
     QUARREL_ARGUE,
@@ -30,6 +31,7 @@ from app.services.llm import (
     LiteLLMNetworkError,
     get_llm_client,
 )
+from app.services.push import deliver_to_user
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -312,7 +314,84 @@ async def run_for_user(
     if not inserted:
         return GenerationResult(user_id=user_id, inserted=False, reason="already_exists")
 
+    # Best-effort: push + email when a fresh report lands. The unique
+    # index on (user_id, period_start) guarantees we only get here on a
+    # genuinely new row, so the cron can't double-notify.
+    try:
+        await _notify_mirror_ready(
+            supabase,
+            user_id=user_id,
+            period_start=period_start.date(),
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "mirror.notify_failed",
+            user_id=user_id,
+            period_start=period_start.date().isoformat(),
+            error=str(err),
+        )
+
     return GenerationResult(user_id=user_id, inserted=True)
+
+
+async def _resolve_email(
+    supabase: AsyncClient, *, user_id: str
+) -> str | None:
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info("mirror.email_lookup_failed", user_id=user_id, error=str(err))
+        return None
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    return email_val if isinstance(email_val, str) and email_val else None
+
+
+async def _notify_mirror_ready(
+    supabase: AsyncClient,
+    *,
+    user_id: str,
+    period_start: date,
+) -> None:
+    """Push (mirror_ready) + email (mirror_report_ready — different name
+    per the existing template registry inconsistency, kept for backwards
+    compatibility).
+    """
+
+    period_iso = period_start.isoformat()
+    try:
+        await deliver_to_user(
+            user_id=user_id,
+            template="mirror_ready",
+            variables={},
+            deep_link=None,
+            idempotency_key=f"push:mirror_ready:{user_id}:{period_iso}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "mirror.push_failed", user_id=user_id, period_start=period_iso, error=str(err)
+        )
+
+    email_addr = await _resolve_email(supabase, user_id=user_id)
+    if not email_addr:
+        return
+    try:
+        await send_email(
+            template="mirror_report_ready",
+            to_email=email_addr,
+            variables={"week_label": period_iso},
+            user_id=user_id,
+            idempotency_key=f"email:mirror_report_ready:{user_id}:{period_iso}",
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "mirror.email_failed",
+            user_id=user_id,
+            period_start=period_iso,
+            error=str(err),
+        )
 
 
 async def run_weekly(
