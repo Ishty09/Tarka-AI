@@ -70,6 +70,7 @@ from app.services.memory import (
 )
 from app.services.quotas import increment_message_count
 from app.services.safety import classify_message, redact
+from app.services.safety_incidents import record_incident
 from app.services.supabase_client import get_supabase
 
 log = structlog.get_logger(__name__)
@@ -207,16 +208,28 @@ async def chat_stream(
     )
 
     if verdict.verdict != "safe":
-        # Short-circuit: persist the user message stamped with the verdict and
-        # emit a single refusal event. Crisis handling (hotlines, emergency
-        # contact ping) lands in Phase H.
-        await _persist_user_message(
+        # Short-circuit: persist the user message stamped with the verdict
+        # and emit a single refusal event. Inline hotlines surface via the
+        # refusal stream; the safety_incidents row + emergency-contact
+        # escalation happen below.
+        unsafe_message_id = await _persist_user_message(
             supabase,
             conversation_id=conversation["id"],
             user_id=user_id,
             content=req.message,
             redacted_content=redacted_message,
             safety_verdict=verdict.verdict,
+        )
+        # Fire-and-forget: the incident insert + emergency-contact email
+        # (§14) must never block the refusal stream. record_incident is
+        # exception-safe internally.
+        await record_incident(
+            supabase,
+            user_id=user_id,
+            conversation_id=conversation["id"],
+            message_id=unsafe_message_id or None,
+            category=verdict.verdict,
+            verdict_reason=verdict.reason,
         )
         return StreamingResponse(
             _refusal_stream(verdict.verdict, verdict.reason),
