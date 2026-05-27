@@ -100,15 +100,14 @@ async def run_nudges() -> IssueNudgeResult:
             continue
         eligible += 1
 
-        link = row_or_none(
-            await (
-                supabase.table("couple_links")
-                .select("user_a, user_b, status")
-                .eq("id", issue["couple_link_id"])
-                .single()
-                .execute()
-            )
+        link_res = await (
+            supabase.table("couple_links")
+            .select("user_a, user_b, status")
+            .eq("id", issue["couple_link_id"])
+            .single()
+            .execute()
         )
+        link = row_or_none(link_res.data)
         if link is None or link.get("status") != "active":
             skipped += 1
             continue

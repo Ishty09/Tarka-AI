@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { LOCALES } from "@quarrel/shared/constants";
 import { hashUserId, trackServer } from "@/lib/analytics";
+import { serverEnv } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 // Every onboarding write goes through here. Each action:
@@ -300,8 +301,32 @@ export async function submitLegal(_prev: ActionResult | null, formData: FormData
     marketing_consent: parsed.data.marketing,
   });
 
+  // Fire-and-forget welcome email. Best-effort: a failure here doesn't
+  // block the redirect — the user still gets to /chat. The workers
+  // endpoint is idempotent on user_id so a double-submit can't
+  // double-send.
+  void sendWelcomeEmail(user.id);
+
   const target = parsed.data.persona_carry
     ? `/chat?persona=${encodeURIComponent(parsed.data.persona_carry)}`
     : "/chat";
   redirect(target);
+}
+
+async function sendWelcomeEmail(userId: string): Promise<void> {
+  if (!serverEnv.WORKERS_URL || !serverEnv.WORKERS_INTERNAL_SECRET) return;
+  try {
+    await fetch(
+      `${serverEnv.WORKERS_URL}/onboarding/users/${userId}/welcome-email`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serverEnv.WORKERS_INTERNAL_SECRET}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch {
+    // Best-effort — user is in regardless.
+  }
 }

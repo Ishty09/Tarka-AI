@@ -59,20 +59,19 @@ async def arbitrate_dispute(
 ) -> ArbitrateResponse:
     supabase = await get_supabase()
 
-    row = row_or_none(
-        await (
-            supabase.table("couple_disputes")
-            .select(
-                "id, couple_link_id, status, title, "
-                "perspective_a_text, perspective_a_user_id, perspective_a_submitted_at, "
-                "perspective_b_text, perspective_b_user_id, perspective_b_submitted_at, "
-                "arbitration"
-            )
-            .eq("id", dispute_id)
-            .single()
-            .execute()
+    row_res = await (
+        supabase.table("couple_disputes")
+        .select(
+            "id, couple_link_id, status, title, "
+            "perspective_a_text, perspective_a_user_id, perspective_a_submitted_at, "
+            "perspective_b_text, perspective_b_user_id, perspective_b_submitted_at, "
+            "arbitration"
         )
+        .eq("id", dispute_id)
+        .single()
+        .execute()
     )
+    row = row_or_none(row_res.data)
 
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dispute not found")
@@ -184,17 +183,16 @@ async def generate_conversation_prep(
 ) -> GeneratePrepResponse:
     supabase = await get_supabase()
 
-    row = row_or_none(
-        await (
-            supabase.table("couple_conversation_preps")
-            .select(
-                "id, couple_link_id, user_id, topic, desired_outcome, context, status, prep"
-            )
-            .eq("id", prep_id)
-            .single()
-            .execute()
+    row_res = await (
+        supabase.table("couple_conversation_preps")
+        .select(
+            "id, couple_link_id, user_id, topic, desired_outcome, context, status, prep"
         )
+        .eq("id", prep_id)
+        .single()
+        .execute()
     )
+    row = row_or_none(row_res.data)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "prep not found")
 
@@ -287,19 +285,18 @@ async def notify_dispute_created(
 
     supabase = await get_supabase()
 
-    row = row_or_none(
-        await (
-            supabase.table("couple_disputes")
-            .select(
-                "id, couple_link_id, title, "
-                "perspective_a_user_id, perspective_a_text, "
-                "perspective_b_user_id, perspective_b_text"
-            )
-            .eq("id", dispute_id)
-            .single()
-            .execute()
+    row_res = await (
+        supabase.table("couple_disputes")
+        .select(
+            "id, couple_link_id, title, "
+            "perspective_a_user_id, perspective_a_text, "
+            "perspective_b_user_id, perspective_b_text"
         )
+        .eq("id", dispute_id)
+        .single()
+        .execute()
     )
+    row = row_or_none(row_res.data)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dispute not found")
 
@@ -312,15 +309,14 @@ async def notify_dispute_created(
     if row.get("perspective_a_text") and row.get("perspective_b_text"):
         return NotifyResponse(ok=True, delivered={"push": False, "email": False})
 
-    link = row_or_none(
-        await (
-            supabase.table("couple_links")
-            .select("user_a, user_b, status")
-            .eq("id", row["couple_link_id"])
-            .single()
-            .execute()
-        )
+    link_res = await (
+        supabase.table("couple_links")
+        .select("user_a, user_b, status")
+        .eq("id", row["couple_link_id"])
+        .single()
+        .execute()
     )
+    link = row_or_none(link_res.data)
     if link is None or link.get("status") != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, "couple link inactive")
 
@@ -329,15 +325,14 @@ async def notify_dispute_created(
         # Pending invite — partner slot not yet filled. Nothing to do.
         return NotifyResponse(ok=True, delivered={"push": False, "email": False})
 
-    sender_profile = row_or_none(
-        await (
-            supabase.table("profiles")
-            .select("display_name, username")
-            .eq("id", sender_id)
-            .single()
-            .execute()
-        )
+    sender_res = await (
+        supabase.table("profiles")
+        .select("display_name, username")
+        .eq("id", sender_id)
+        .single()
+        .execute()
     )
+    sender_profile = row_or_none(sender_res.data)
     sender_name = "Your partner"
     if sender_profile:
         sender_name = (
@@ -430,19 +425,18 @@ async def notify_perspective_added(
 
     supabase = await get_supabase()
 
-    row = row_or_none(
-        await (
-            supabase.table("couple_disputes")
-            .select(
-                "id, couple_link_id, title, "
-                "perspective_a_user_id, perspective_a_submitted_at, "
-                "perspective_b_user_id, perspective_b_submitted_at"
-            )
-            .eq("id", dispute_id)
-            .single()
-            .execute()
+    row_res = await (
+        supabase.table("couple_disputes")
+        .select(
+            "id, couple_link_id, title, "
+            "perspective_a_user_id, perspective_a_submitted_at, "
+            "perspective_b_user_id, perspective_b_submitted_at"
         )
+        .eq("id", dispute_id)
+        .single()
+        .execute()
     )
+    row = row_or_none(row_res.data)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dispute not found")
 
@@ -460,15 +454,14 @@ async def notify_perspective_added(
     else:
         creator_id, answerer_id = b_uid, a_uid
 
-    answerer_profile = row_or_none(
-        await (
-            supabase.table("profiles")
-            .select("display_name, username")
-            .eq("id", answerer_id)
-            .single()
-            .execute()
-        )
+    answerer_res = await (
+        supabase.table("profiles")
+        .select("display_name, username")
+        .eq("id", answerer_id)
+        .single()
+        .execute()
     )
+    answerer_profile = row_or_none(answerer_res.data)
     partner_name = "Your partner"
     if answerer_profile:
         partner_name = (
@@ -555,15 +548,14 @@ async def _notify_dispute_arbitrated(
     sinking the others.
     """
 
-    link = row_or_none(
-        await (
-            supabase.table("couple_links")
-            .select("user_a, user_b")
-            .eq("id", couple_link_id)
-            .single()
-            .execute()
-        )
+    link_res = await (
+        supabase.table("couple_links")
+        .select("user_a, user_b")
+        .eq("id", couple_link_id)
+        .single()
+        .execute()
     )
+    link = row_or_none(link_res.data)
     if link is None:
         return
 
@@ -700,15 +692,14 @@ async def email_couple_invite(
 
     supabase = await get_supabase()
 
-    link = row_or_none(
-        await (
-            supabase.table("couple_links")
-            .select("id, user_a, status, invite_code, invite_expires_at")
-            .eq("id", link_id)
-            .single()
-            .execute()
-        )
+    link_res = await (
+        supabase.table("couple_links")
+        .select("id, user_a, status, invite_code, invite_expires_at")
+        .eq("id", link_id)
+        .single()
+        .execute()
     )
+    link = row_or_none(link_res.data)
     if link is None or link.get("status") != "pending":
         raise HTTPException(status.HTTP_409_CONFLICT, "invite not pending")
     invite_code = link.get("invite_code")
@@ -717,15 +708,14 @@ async def email_couple_invite(
 
     # Inviter name — prefer display_name, fall back to username, then a
     # neutral placeholder so the email subject still reads naturally.
-    inviter_profile = row_or_none(
-        await (
-            supabase.table("profiles")
-            .select("display_name, username")
-            .eq("id", link["user_a"])
-            .single()
-            .execute()
-        )
+    inviter_res = await (
+        supabase.table("profiles")
+        .select("display_name, username")
+        .eq("id", link["user_a"])
+        .single()
+        .execute()
     )
+    inviter_profile = row_or_none(inviter_res.data)
     inviter_name = "Someone you know"
     if inviter_profile:
         inviter_name = (

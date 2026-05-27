@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.observability import init_sentry
-from app.routes import admin, chat, couples, cron, safety, tools, webhooks
+from app.routes import admin, chat, couples, cron, onboarding, safety, tools, webhooks
 
 # Sentry must initialise before FastAPI creates middleware so the
 # integration can hook the request lifecycle (§27 step 60).
@@ -29,6 +29,7 @@ app.include_router(tools.router)
 app.include_router(admin.router)
 app.include_router(webhooks.router)
 app.include_router(couples.router)
+app.include_router(onboarding.router)
 
 
 @app.get("/health")
