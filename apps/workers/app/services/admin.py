@@ -19,6 +19,7 @@ from supabase import AsyncClient
 
 from app.services._db_typing import row_or_none
 from app.services._db_typing import rows as _rows
+from app.services.email import send_email
 
 log = structlog.get_logger(__name__)
 
@@ -70,6 +71,63 @@ async def _audit(
         )
         .execute()
     )
+
+
+async def _send_moderation_rejection_email(
+    supabase: AsyncClient,
+    *,
+    user_id: str,
+    entity_type: str,
+    entity_label: str,
+    entity_id: str,
+    reason: str | None,
+) -> None:
+    """Best-effort email to the creator after a persona / feed-post
+    rejection. Failures don't roll back the moderation action;
+    moderators' work is the source of truth, the email is the courtesy.
+
+    Idempotency keyed on (entity_type, entity_id) so a re-run of the
+    moderation action doesn't double-notify. If a moderator reverses
+    the rejection later and then re-rejects, the same key applies —
+    that's the conservative choice (no spam).
+    """
+
+    try:
+        res = await supabase.auth.admin.get_user_by_id(user_id)
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.info(
+            "admin.moderation_email.lookup_failed",
+            user_id=user_id,
+            error=str(err),
+        )
+        return
+    user_obj = getattr(res, "user", None) or getattr(res, "data", None)
+    email_val = getattr(user_obj, "email", None) if user_obj else None
+    if not isinstance(email_val, str) or not email_val:
+        return
+
+    try:
+        await send_email(
+            template="moderation_rejection",
+            to_email=email_val,
+            variables={
+                "entity_type": entity_type,
+                "entity_label": entity_label,
+                "reason": reason or "Didn't meet our content guidelines.",
+            },
+            user_id=user_id,
+            idempotency_key=(
+                f"email:moderation_rejection:{entity_type}:{entity_id}"
+            ),
+            supabase=supabase,
+        )
+    except Exception as err:  # pragma: no cover - non-fatal
+        log.warning(
+            "admin.moderation_email.send_failed",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            error=str(err),
+        )
 
 
 # ----- Listing reads -------------------------------------------------------
@@ -226,6 +284,21 @@ async def moderate_persona(
         "flag": "flagged",
     }
     new_status = status_map[action]
+
+    # On reject we need owner + name to email the creator (§14
+    # moderation_rejection). Read BEFORE the update so we have the
+    # row even if the update somehow loses it.
+    persona_snapshot: dict[str, Any] | None = None
+    if action == "reject":
+        snap_res = (
+            await supabase.table("personas")
+            .select("owner_id, name")
+            .eq("id", persona_id)
+            .maybe_single()
+            .execute()
+        )
+        persona_snapshot = row_or_none(snap_res.data) if snap_res is not None else None
+
     await (
         supabase.table("personas")
         .update(
@@ -246,6 +319,18 @@ async def moderate_persona(
         entity_id=persona_id,
         metadata={"notes": notes} if notes else None,
     )
+    if action == "reject" and persona_snapshot is not None:
+        owner_id = persona_snapshot.get("owner_id")
+        name = persona_snapshot.get("name") or "Your persona"
+        if isinstance(owner_id, str):
+            await _send_moderation_rejection_email(
+                supabase,
+                user_id=owner_id,
+                entity_type="persona",
+                entity_label=str(name),
+                entity_id=persona_id,
+                reason=notes,
+            )
     if action == "approve":
         # §20 persona_published fires when an admin approves a user-
         # submitted persona, which makes it visible in the marketplace
@@ -285,6 +370,21 @@ async def moderate_feed_post(
             "is_safe": False,
             "visibility": "removed",
         }
+
+    # On reject we need owner + caption to email the poster (§14
+    # moderation_rejection). Read BEFORE update so the caption is
+    # still authoritative.
+    post_snapshot: dict[str, Any] | None = None
+    if action == "reject":
+        snap_res = (
+            await supabase.table("roast_feed_posts")
+            .select("user_id, caption")
+            .eq("id", post_id)
+            .maybe_single()
+            .execute()
+        )
+        post_snapshot = row_or_none(snap_res.data) if snap_res is not None else None
+
     await supabase.table("roast_feed_posts").update(update).eq("id", post_id).execute()
     await _audit(
         supabase,
@@ -294,6 +394,23 @@ async def moderate_feed_post(
         entity_id=post_id,
         metadata={"notes": notes} if notes else None,
     )
+
+    if action == "reject" and post_snapshot is not None:
+        owner_id = post_snapshot.get("user_id")
+        caption_raw = post_snapshot.get("caption")
+        if isinstance(caption_raw, str) and caption_raw.strip():
+            entity_label = caption_raw.strip()[:80]
+        else:
+            entity_label = "your roast post"
+        if isinstance(owner_id, str):
+            await _send_moderation_rejection_email(
+                supabase,
+                user_id=owner_id,
+                entity_type="roast feed post",
+                entity_label=entity_label,
+                entity_id=post_id,
+                reason=notes,
+            )
 
 
 async def suspend_user(

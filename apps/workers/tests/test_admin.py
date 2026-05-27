@@ -14,6 +14,7 @@ os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.test")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 os.environ.setdefault("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test")
 
+from app.services import admin as admin_mod
 from app.services.admin import (
     NotAdminError,
     list_incidents,
@@ -253,6 +254,205 @@ async def test_moderate_feed_post_reject_takes_down() -> None:
     assert post["moderation_status"] == "rejected"
     assert post["visibility"] == "removed"
     assert post["is_safe"] is False
+
+
+# ----- Moderation rejection email -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_moderate_persona_reject_emails_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rejecting a persona fires the moderation_rejection email with the
+    persona's name as entity_label and the moderator notes as reason.
+    """
+
+    sb = FakeSupabase()
+    sb.table("personas").rows.append(
+        {
+            "id": "p-rej",
+            "owner_id": "owner-1",
+            "name": "Hostile Uncle",
+            "moderation_status": "pending",
+            "is_safe": False,
+        }
+    )
+    sb.table("profiles").rows.append({"id": "admin", "is_admin": True})
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_helper(_sb: Any, **kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        admin_mod, "_send_moderation_rejection_email", fake_helper
+    )
+
+    actor = await require_admin(sb, user_id="admin")  # type: ignore[arg-type]
+    await moderate_persona(
+        sb,  # type: ignore[arg-type]
+        actor=actor,
+        persona_id="p-rej",
+        action="reject",
+        notes="Reads like a real-person impersonation.",
+    )
+
+    assert len(sent) == 1
+    call = sent[0]
+    assert call["user_id"] == "owner-1"
+    assert call["entity_type"] == "persona"
+    assert call["entity_label"] == "Hostile Uncle"
+    assert call["entity_id"] == "p-rej"
+    assert call["reason"] == "Reads like a real-person impersonation."
+
+
+@pytest.mark.asyncio
+async def test_moderate_persona_approve_does_not_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sb = FakeSupabase()
+    sb.table("personas").rows.append(
+        {"id": "p", "owner_id": "u", "name": "OK", "moderation_status": "pending"}
+    )
+    sb.table("profiles").rows.append({"id": "admin", "is_admin": True})
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_helper(_sb: Any, **kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        admin_mod, "_send_moderation_rejection_email", fake_helper
+    )
+
+    actor = await require_admin(sb, user_id="admin")  # type: ignore[arg-type]
+    await moderate_persona(
+        sb, actor=actor, persona_id="p", action="approve"  # type: ignore[arg-type]
+    )
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_moderate_feed_post_reject_uses_caption_for_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Posts with a caption get that caption as entity_label so the
+    poster knows which submission was rejected. Long captions are
+    truncated to keep the email subject readable.
+    """
+
+    sb = FakeSupabase()
+    long_caption = "x" * 120
+    sb.table("roast_feed_posts").rows.append(
+        {
+            "id": "fp",
+            "user_id": "poster-1",
+            "caption": long_caption,
+            "moderation_status": "pending",
+            "visibility": "public",
+            "is_safe": True,
+        }
+    )
+    sb.table("profiles").rows.append({"id": "admin", "is_admin": True})
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_helper(_sb: Any, **kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        admin_mod, "_send_moderation_rejection_email", fake_helper
+    )
+
+    actor = await require_admin(sb, user_id="admin")  # type: ignore[arg-type]
+    await moderate_feed_post(
+        sb,  # type: ignore[arg-type]
+        actor=actor,
+        post_id="fp",
+        action="reject",
+        notes="Targets a protected class.",
+    )
+
+    assert len(sent) == 1
+    call = sent[0]
+    assert call["user_id"] == "poster-1"
+    assert call["entity_type"] == "roast feed post"
+    assert call["entity_label"] == "x" * 80  # truncated
+    assert call["reason"] == "Targets a protected class."
+
+
+@pytest.mark.asyncio
+async def test_moderate_feed_post_reject_falls_back_when_caption_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sb = FakeSupabase()
+    sb.table("roast_feed_posts").rows.append(
+        {
+            "id": "fp",
+            "user_id": "poster-2",
+            "caption": None,
+            "moderation_status": "pending",
+            "visibility": "public",
+            "is_safe": True,
+        }
+    )
+    sb.table("profiles").rows.append({"id": "admin", "is_admin": True})
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_helper(_sb: Any, **kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        admin_mod, "_send_moderation_rejection_email", fake_helper
+    )
+
+    actor = await require_admin(sb, user_id="admin")  # type: ignore[arg-type]
+    await moderate_feed_post(
+        sb, actor=actor, post_id="fp", action="reject"  # type: ignore[arg-type]
+    )
+
+    assert len(sent) == 1
+    assert sent[0]["entity_label"] == "your roast post"
+
+
+@pytest.mark.asyncio
+async def test_moderate_feed_post_remove_does_not_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`remove` is for a post that was previously APPROVED and is being
+    taken down — that's an administrative action, not a content
+    rejection. No email is sent (spec scopes moderation_rejection to
+    `reject` only).
+    """
+
+    sb = FakeSupabase()
+    sb.table("roast_feed_posts").rows.append(
+        {
+            "id": "fp",
+            "user_id": "poster-3",
+            "caption": "ok post",
+            "moderation_status": "approved",
+            "visibility": "public",
+            "is_safe": True,
+        }
+    )
+    sb.table("profiles").rows.append({"id": "admin", "is_admin": True})
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_helper(_sb: Any, **kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(
+        admin_mod, "_send_moderation_rejection_email", fake_helper
+    )
+
+    actor = await require_admin(sb, user_id="admin")  # type: ignore[arg-type]
+    await moderate_feed_post(
+        sb, actor=actor, post_id="fp", action="remove"  # type: ignore[arg-type]
+    )
+    assert sent == []
 
 
 @pytest.mark.asyncio
