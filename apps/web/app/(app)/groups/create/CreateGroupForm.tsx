@@ -131,7 +131,17 @@ export function CreateGroupForm({
       </label>
 
       {state?.ok === false && (
-        <p role="alert" className="text-sm text-destructive">{state.error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {state.error}
+          {state.upgrade && (
+            <>
+              {" "}
+              <Link href="/pricing" className="font-medium underline">
+                Upgrade →
+              </Link>
+            </>
+          )}
+        </p>
       )}
 
       <button

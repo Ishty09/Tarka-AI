@@ -11,7 +11,9 @@ import { generateGroupInviteCode, maxSeatsForTier } from "@/lib/groups";
 // All group-room mutations run as the authenticated user — RLS
 // (§6.7 group_rooms_member + group_members_visible) gates everything.
 
-export type ActionResult = { ok: true; payload?: unknown } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; payload?: unknown }
+  | { ok: false; error: string; upgrade?: boolean };
 
 // ----- Create room (§9.3.4 step 1) -----------------------------------------
 
@@ -48,13 +50,15 @@ export async function createGroup(
   if (seatCap === 0) {
     return {
       ok: false,
-      error: "Free tier doesn't include group rooms. Upgrade to create one.",
+      error: "Free tier doesn't include group rooms.",
+      upgrade: true,
     };
   }
   if (parsed.data.max_members > seatCap) {
     return {
       ok: false,
       error: `Your ${tier} tier caps rooms at ${seatCap} seats. Pick a smaller size.`,
+      upgrade: true,
     };
   }
 
@@ -137,7 +141,8 @@ export async function joinGroup(
   if (maxSeatsForTier(tier) === 0) {
     return {
       ok: false,
-      error: "Free tier doesn't include group rooms. Upgrade to accept.",
+      error: "Free tier doesn't include group rooms.",
+      upgrade: true,
     };
   }
 
