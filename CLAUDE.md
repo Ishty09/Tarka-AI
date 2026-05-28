@@ -1557,7 +1557,7 @@ After signup at `/signup`:
 
 **Step 1 — Welcome (`/onboarding/welcome`)**
 - Headline: "Quarrel won't lie to you. Confirm you want that."
-- Two buttons: "I want that" → continue, "I want a yes-man" → redirect to ChatGPT (yes, actually)
+- One button: "I want that" → continue. (Earlier draft had a second "I want a yes-man → ChatGPT" link as a punchline; retired 2026-05-28 — shipping a competitor link inside the signup funnel cost real activation.)
 
 **Step 2 — Profile (`/onboarding/profile`)**
 - Username (3-30 chars, unique, lowercase + numbers + underscore)
@@ -2170,6 +2170,7 @@ Ship when all true:
 2026-05-24 — `cohort_retention` view defines "retained" as ≥ 1 `role='user'` message between [signup+1d, signup+8d). §28 launch gate ≥ 30% surfaced on `/admin/retention` + `pnpm report:retention`. Exit codes wire the SQL into the launch-day decision.
 2026-05-24 — Marketing landing copy stays English-only for launch; legal + push-notification strings are the only i18n surfaces. Step-53 translation job stays narrowly scoped to UI message bundles.
 2026-05-24 — Public launch is gated by `pnpm launch-check` (env + typecheck + tests + smoke + retention) AND a non-automated checklist (legal review, Polar test purchase, crisis-flow native-speaker tests, founder mental-load). A green launch-check is never a substitute for the manual rows.
+2026-05-28 — Retired the §11 step 1 "I want a yes-man → ChatGPT" button. Original spec leaned into the joke by sending validation-seekers to ChatGPT; in practice it bled signups out of the funnel by accident-clicks and offered a competitor a free outbound link. Welcome page is now a single "I want that" confirmation. The friction (one explicit click) still serves the original intent without the leak.
 ```
 
 ---

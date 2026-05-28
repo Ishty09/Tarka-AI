@@ -1,7 +1,9 @@
 import { OnboardingShell } from "../_components/Shell";
 
-// §11 step 1 — two buttons. "I want a yes-man" sends them to ChatGPT (the
-// spec explicitly says "yes, actually"). No DB write.
+// §11 step 1 — single confirmation button. The original spec had a
+// second "I want a yes-man → ChatGPT" link as a punchline, but
+// shipping a competitor link inside our signup funnel cost real
+// activation, so it's been retired (decision log 2026-05-28).
 
 export default function WelcomePage() {
   return (
@@ -17,16 +19,8 @@ export default function WelcomePage() {
         >
           I want that
         </a>
-        <a
-          href="https://chat.openai.com"
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-muted-foreground shadow-sm hover:bg-accent"
-        >
-          I want a yes-man (opens ChatGPT) ↗
-        </a>
         <p className="text-xs text-muted-foreground">
-          Picking option two opens ChatGPT. That&apos;s the right tool if you want validation.
+          One click in and you&apos;ve agreed to be argued with.
         </p>
       </div>
     </OnboardingShell>
