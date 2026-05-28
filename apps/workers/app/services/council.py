@@ -72,7 +72,18 @@ class CouncilRun:
 
 
 class CouncilWipeoutError(Exception):
-    """All five councilors failed. Caller decides how to surface this."""
+    """All five councilors failed. Caller decides how to surface this.
+
+    `causes` carries (slug, error) per failed councilor so the route can
+    return something more actionable than a generic 502 — operators
+    looking at the first failed error message can usually tell whether
+    LiteLLM is down, OpenAI rate-limited us, the model name drifted,
+    etc.
+    """
+
+    def __init__(self, message: str, causes: list[tuple[str, str | None]] | None = None) -> None:
+        super().__init__(message)
+        self.causes: list[tuple[str, str | None]] = causes or []
 
 
 # ----- Persona loading -------------------------------------------------------
@@ -347,7 +358,10 @@ async def _load_judge_persona_id(supabase: AsyncClient) -> str:
     fallback = await supabase.table("personas").select("id").limit(1).execute()
     rows = _rows(fallback.data)
     if not rows:
-        raise CouncilWipeoutError("no_persona_rows_for_council_host")
+        raise CouncilWipeoutError(
+            "no_persona_rows_for_council_host",
+            causes=[("host", "personas table is empty — seed wasn't applied")],
+        )
     return str(rows[0]["id"])
 
 
@@ -375,8 +389,13 @@ async def run_council(
     )
 
     if not any(r.text for r in replies):
-        log.warning("council.wipeout", user_id=user_id)
-        raise CouncilWipeoutError("all_councilors_failed")
+        causes = [(r.slug, r.error) for r in replies]
+        log.warning(
+            "council.wipeout",
+            user_id=user_id,
+            causes=causes,
+        )
+        raise CouncilWipeoutError("all_councilors_failed", causes=causes)
 
     verdict = await run_judge(
         dilemma=dilemma,

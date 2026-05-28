@@ -67,7 +67,22 @@ export function CouncilForm() {
       }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.detail?.reason ?? body.detail?.error ?? body.error ?? `Request failed (${res.status})`);
+        // Workers' /tools/council returns 502 with detail.first_cause
+        // (e.g. "rate_limit_exceeded", "model_not_found") when every
+        // councilor LLM call fails. Surface it so the user knows
+        // whether to retry, wait, or escalate.
+        const cause = body.detail?.first_cause;
+        const reason = body.detail?.reason ?? body.detail?.error;
+        if (res.status === 502 && cause) {
+          setError(
+            `The council couldn't be reached. Upstream said: ${cause}. ` +
+            "Try again in a minute — if it keeps failing, contact support.",
+          );
+        } else {
+          setError(
+            reason ?? body.detail ?? body.error ?? `Request failed (${res.status})`,
+          );
+        }
         return;
       }
       const data = (await res.json()) as CouncilResponse;

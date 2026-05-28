@@ -164,10 +164,28 @@ async def council(
     try:
         run = await run_council(supabase, user_id=user_id, dilemma=req.dilemma)
     except CouncilWipeoutError as err:
-        log.warning("council.wipeout", user_id=user_id, error=str(err))
+        log.warning(
+            "council.wipeout",
+            user_id=user_id,
+            error=str(err),
+            causes=err.causes,
+        )
+        # Surface the first non-empty per-councilor error string so the
+        # form can show something more actionable than a generic 502
+        # (rate limit / auth / model drift / etc.).
+        first_cause = next(
+            (cause for _, cause in err.causes if cause), None
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "council_wipeout",
+            detail={
+                "error": "council_wipeout",
+                "reason": str(err),
+                "first_cause": first_cause,
+                "causes": [
+                    {"slug": slug, "error": cause} for slug, cause in err.causes
+                ],
+            },
         ) from err
 
     await increment_council_count(supabase, user_id)
