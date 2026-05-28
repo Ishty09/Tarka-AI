@@ -52,6 +52,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }),
   ]);
 
+  // Surface RPC errors loudly in server logs so a deploy where the
+  // get_sidebar_conversations function is missing / RLS is misconfigured
+  // doesn't silently degrade to "No conversations yet." The user still
+  // sees the empty state — we just have something to grep for.
+  if (convRes.error) {
+    console.error("[layout] get_sidebar_conversations failed", {
+      user_id: user.id,
+      code: convRes.error.code,
+      message: convRes.error.message,
+      details: convRes.error.details,
+      hint: convRes.error.hint,
+    });
+  }
+
   const rows = (convRes.data ?? []) as SidebarRpcRow[];
   const conversations: ConversationSummary[] = rows.map((c) => ({
     id: c.id,
