@@ -39,6 +39,45 @@ const COUNCIL_LABELS: Record<string, string> = {
   the_insider: "The Insider",
 };
 
+/**
+ * Map a workers `first_cause` string (e.g. "LiteLLM /chat/completions 429")
+ * to a user-facing message. The cause comes straight from the LLM proxy
+ * so the surface area is broad — we match common patterns and fall back
+ * to a generic retry message when nothing matches.
+ */
+function councilWipeoutMessage(cause: string): string {
+  const lower = cause.toLowerCase();
+  if (lower.includes("429") || lower.includes("rate") || lower.includes("quota")) {
+    // OpenAI doesn't surface a precise reset time through LiteLLM today,
+    // so we can't say "next limit at HH:MM". The honest message is:
+    // it's a rate limit, wait a bit and retry.
+    return (
+      "Rate limit hit on the upstream LLM. The current burst is exhausted — " +
+      "wait a minute or two and try again. If it keeps failing for the next " +
+      "10 minutes, the daily/hourly quota is likely exceeded; check OpenAI usage."
+    );
+  }
+  if (lower.includes("401") || lower.includes("403") || lower.includes("auth")) {
+    return (
+      "The LLM provider rejected our credentials. This is an operator issue " +
+      "(rotated key, billing problem). Please contact support."
+    );
+  }
+  if (lower.includes("404") || lower.includes("model") && lower.includes("not")) {
+    return (
+      "The model the council uses isn't reachable. This is an operator issue " +
+      "(model name drift or LiteLLM config). Please contact support."
+    );
+  }
+  if (lower.includes("timeout") || lower.includes("network") || lower.includes("connection")) {
+    return "The LLM provider didn't respond in time. Try again in a moment.";
+  }
+  return (
+    `The council couldn't be reached. Upstream said: ${cause}. ` +
+    "Try again in a minute — if it keeps failing, contact support."
+  );
+}
+
 export function CouncilForm() {
   const [dilemma, setDilemma] = useState("");
   const [pending, setPending] = useState(false);
@@ -68,16 +107,13 @@ export function CouncilForm() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         // Workers' /tools/council returns 502 with detail.first_cause
-        // (e.g. "rate_limit_exceeded", "model_not_found") when every
-        // councilor LLM call fails. Surface it so the user knows
-        // whether to retry, wait, or escalate.
-        const cause = body.detail?.first_cause;
+        // (e.g. "LiteLLM /chat/completions 429") when every councilor
+        // LLM call fails. Classify common cases so the user sees what
+        // to do instead of a raw HTTP error.
+        const cause: string | undefined = body.detail?.first_cause;
         const reason = body.detail?.reason ?? body.detail?.error;
         if (res.status === 502 && cause) {
-          setError(
-            `The council couldn't be reached. Upstream said: ${cause}. ` +
-            "Try again in a minute — if it keeps failing, contact support.",
-          );
+          setError(councilWipeoutMessage(cause));
         } else {
           setError(
             reason ?? body.detail ?? body.error ?? `Request failed (${res.status})`,

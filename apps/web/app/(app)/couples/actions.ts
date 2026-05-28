@@ -57,19 +57,40 @@ export async function createInvite(
     };
   }
 
-  // Count active OR pending couple_links where this user is the creator
-  // OR the accepter. RLS already scopes the read.
-  const { count } = await supabase
+  // Count active links + pending links that haven't expired yet. An old
+  // invite the user never shared (status=pending, invite_expires_at <
+  // now()) still has status='pending' until something sweeps it —
+  // including it in the cap locks a free-tier user out of creating
+  // their one allowed link forever.
+  const nowIso = new Date().toISOString();
+  const { count: activeCount } = await supabase
     .from("couple_links")
     .select("id", { count: "exact", head: true })
-    .in("status", ["pending", "active"])
+    .eq("status", "active")
     .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-  if ((count ?? 0) >= limit) {
+  const { count: pendingCount } = await supabase
+    .from("couple_links")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .gt("invite_expires_at", nowIso)
+    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+  const liveCount = (activeCount ?? 0) + (pendingCount ?? 0);
+  if (liveCount >= limit) {
     return {
       ok: false,
       error: `You're at your ${tier} cap of ${limit} active couple link${limit === 1 ? "" : "s"}. Revoke one to send another invite.`,
     };
   }
+
+  // Stale-pending sweep: any rows belonging to this user that have aged
+  // past invite_expires_at get flipped to 'expired'. Best-effort — if it
+  // fails for any reason we still let the new invite go through.
+  await supabase
+    .from("couple_links")
+    .update({ status: "expired" })
+    .eq("status", "pending")
+    .lt("invite_expires_at", nowIso)
+    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
   const code = generateInviteCode();
   const expires = inviteExpiry();
