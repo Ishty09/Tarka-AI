@@ -7,6 +7,7 @@ import { CookieBanner } from "./_components/CookieBanner";
 import { ThemeProvider } from "./_components/ThemeProvider";
 import "./globals.css";
 
+// chore: empty-trigger 2026-05-29 to test Vercel webhook
 const UMAMI_WEBSITE_ID = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
 const UMAMI_SCRIPT_URL = process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL;
 
