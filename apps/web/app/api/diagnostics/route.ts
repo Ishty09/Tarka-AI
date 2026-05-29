@@ -22,7 +22,9 @@ async function safe(fn: () => Promise<CheckResult>): Promise<CheckResult> {
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Unknown error",
+      error: err instanceof Error
+        ? err.message || err.toString() || "thrown empty Error"
+        : `non-Error thrown: ${String(err)}`,
     };
   }
 }
@@ -61,60 +63,76 @@ export async function GET() {
     if (!res.ok) {
       return { ok: false, error: `workers /health returned ${res.status}` };
     }
-    const body = await res.json();
-    return { ok: true, detail: body };
-  });
-
-  // ----- DB: is the new couples-invite RLS policy installed? -------------
-  const rlsCheck: CheckResult = await safe(async () => {
-    // pg_policies is queryable by authenticated users via supabase by
-    // default. If it's not, the .from() call will error and the
-    // wrapped catch will surface it.
-    const res = await supabase
-      .from("pg_policies" as never)
-      .select("policyname, tablename")
-      .eq("tablename", "couple_links")
-      .eq("policyname", "couple_links_pending_invite_lookup");
-    if (res.error) {
-      return { ok: false, error: res.error.message, detail: res.error };
-    }
-    const rows = (res.data as { policyname: string; tablename: string }[]) ?? [];
+    const body: Record<string, unknown> = await res.json();
+    const hasMarker =
+      typeof body.build_marker === "string" && body.build_marker.length > 0;
     return {
-      ok: rows.length > 0,
-      detail: rows.length > 0
-        ? "couple_links_pending_invite_lookup IS installed"
-        : "couple_links_pending_invite_lookup is MISSING — run the migration SQL in Supabase Dashboard",
+      ok: hasMarker,
+      detail: {
+        body,
+        verdict: hasMarker
+          ? `build_marker present — workers ARE running latest code: ${String(body.build_marker)}`
+          : "build_marker MISSING — Coolify hasn't pushed the new container. Redeploy workers from the Coolify dashboard.",
+      },
     };
   });
 
-  // ----- Conversations: count + sample row -------------------------------
-  const conversationsCheck: CheckResult = await safe(async () => {
-    const countRes = await supabase
-      .from("conversations")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id);
-    if (countRes.error) {
-      return { ok: false, error: countRes.error.message };
+  // ----- DB: can we query couple_links at all (smoke test)? -------------
+  // pg_policies lives in pg_catalog and isn't queryable through PostgREST,
+  // so we can't introspect the policy list from here. Instead: do a
+  // controlled lookup with a code that can't exist. We expect 0 rows
+  // either way. The check is mostly that the table is reachable.
+  const couplesTableCheck: CheckResult = await safe(async () => {
+    const res = await supabase
+      .from("couple_links")
+      .select("id")
+      .eq("invite_code", "DIAGNOSTIC-PROBE-INVALID-CODE")
+      .limit(1);
+    if (res.error) {
+      return {
+        ok: false,
+        error: res.error.message,
+        detail: {
+          code: res.error.code,
+          hint: res.error.hint,
+          note: "couple_links table not reachable via PostgREST — check RLS / grants.",
+        },
+      };
     }
-    const activeCountRes = await supabase
-      .from("conversations")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("archived", false);
+    return {
+      ok: true,
+      detail: {
+        rows_returned_for_fake_code: (res.data ?? []).length,
+        note: "Table reachable. Manual RLS-policy check below.",
+      },
+    };
+  });
 
-    const sampleRes = await supabase
+  // ----- Conversations: count + sample row (no head/count tricks) -------
+  const conversationsCheck: CheckResult = await safe(async () => {
+    const allRes = await supabase
       .from("conversations")
       .select("id, mode, archived, title, created_at, updated_at")
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false })
-      .limit(3);
-
+      .limit(50);
+    if (allRes.error) {
+      return {
+        ok: false,
+        error: allRes.error.message,
+        detail: { code: allRes.error.code, hint: allRes.error.hint },
+      };
+    }
+    const all = allRes.data ?? [];
+    const active = all.filter((r) => r.archived === false);
+    const archived = all.filter((r) => r.archived === true);
     return {
       ok: true,
       detail: {
-        total_for_user: countRes.count ?? 0,
-        active_for_user: activeCountRes.count ?? 0,
-        sample_recent_three: sampleRes.data ?? [],
+        total_for_user: all.length,
+        active_for_user: active.length,
+        archived_for_user: archived.length,
+        sample_recent_three: all.slice(0, 3),
       },
     };
   });
@@ -123,10 +141,25 @@ export async function GET() {
   const messagesCheck: CheckResult = await safe(async () => {
     const res = await supabase
       .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id);
-    if (res.error) return { ok: false, error: res.error.message };
-    return { ok: true, detail: { total_user_messages: res.count ?? 0 } };
+      .select("id, role, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (res.error) {
+      return {
+        ok: false,
+        error: res.error.message,
+        detail: { code: res.error.code, hint: res.error.hint },
+      };
+    }
+    const rows = res.data ?? [];
+    return {
+      ok: true,
+      detail: {
+        total_user_messages: rows.length,
+        most_recent: rows[0]?.created_at ?? null,
+      },
+    };
   });
 
   return NextResponse.json(
@@ -140,16 +173,23 @@ export async function GET() {
       web: webDeployment,
       workers: workersCheck,
       database: {
-        couples_invite_rls: rlsCheck,
+        couples_table_reachable: couplesTableCheck,
+        couples_rls_policy_check: {
+          ok: null,
+          detail:
+            "pg_policies cannot be queried via PostgREST. Run this in Supabase Dashboard → SQL Editor:\n" +
+            "select policyname from pg_policies where tablename = 'couple_links';\n" +
+            "Look for 'couple_links_pending_invite_lookup' in the results. If missing, the migration SQL wasn't applied.",
+        },
       },
       data: {
         conversations: conversationsCheck,
         messages: messagesCheck,
       },
       next_steps: [
-        "If workers.detail.build_marker is missing or older than '2026-05-29-council-structured-errors', Coolify hasn't actually redeployed the workers container.",
-        "If database.couples_invite_rls.ok is false, the migration SQL was never applied to your prod DB — paste the SQL into Supabase Dashboard SQL Editor.",
-        "If data.conversations.detail.active_for_user is 0, you genuinely have no conversations on this signed-in account — either your old chats are under a different auth.users row, or workers persistence failed silently. Try sending a fresh test message.",
+        "If workers.detail.body.build_marker is missing or older than '2026-05-29-council-structured-errors', Coolify hasn't actually redeployed the workers container. THIS IS LIKELY THE PRIMARY BLOCKER.",
+        "If data.conversations.detail.total_for_user > 0 but active_for_user is 0, all your chats are archived (unarchive at /chat?show=archived).",
+        "If data.conversations.detail.total_for_user is 0 AND workers don't have the marker → chats can't persist because workers are running old code. Fix workers first, THEN send a test message.",
       ],
     },
     { status: 200 },

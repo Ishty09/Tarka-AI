@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 interface CheckResult {
-  ok: boolean;
+  ok: boolean | null;
   detail?: unknown;
   error?: string;
 }
@@ -19,21 +19,33 @@ interface Snapshot {
     deployed_branch: string;
   };
   workers: CheckResult;
-  database: { couples_invite_rls: CheckResult };
+  database: {
+    couples_table_reachable: CheckResult;
+    couples_rls_policy_check: CheckResult;
+  };
   data: { conversations: CheckResult; messages: CheckResult };
   next_steps: string[];
 }
 
-function StatusPill({ ok, label }: { ok: boolean; label: string }) {
+function StatusPill({
+  ok,
+  label,
+}: {
+  ok: boolean | null;
+  label: string;
+}) {
+  const style =
+    ok === true
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : ok === false
+      ? "bg-red-500/10 text-red-700 dark:text-red-300"
+      : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  const icon = ok === true ? "✓" : ok === false ? "✗" : "?";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-        ok
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "bg-red-500/10 text-red-700 dark:text-red-300"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${style}`}
     >
-      <span aria-hidden>{ok ? "✓" : "✗"}</span>
+      <span aria-hidden>{icon}</span>
       {label}
     </span>
   );
@@ -45,7 +57,7 @@ function Section({
   children,
 }: {
   title: string;
-  status?: boolean;
+  status?: boolean | null;
   children: React.ReactNode;
 }) {
   return (
@@ -53,7 +65,10 @@ function Section({
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{title}</h2>
         {status !== undefined && (
-          <StatusPill ok={status} label={status ? "OK" : "FAIL"} />
+          <StatusPill
+            ok={status}
+            label={status === true ? "OK" : status === false ? "FAIL" : "MANUAL"}
+          />
         )}
       </div>
       <div className="mt-3 text-xs">{children}</div>
@@ -110,10 +125,10 @@ export function DiagnosticsView() {
   }
 
   const overallOk =
-    snap.workers.ok &&
-    snap.database.couples_invite_rls.ok &&
-    snap.data.conversations.ok &&
-    snap.data.messages.ok;
+    snap.workers.ok === true &&
+    snap.database.couples_table_reachable.ok === true &&
+    snap.data.conversations.ok === true &&
+    snap.data.messages.ok === true;
 
   return (
     <div className="mt-6 flex flex-col gap-4">
@@ -145,13 +160,22 @@ export function DiagnosticsView() {
       </Section>
 
       <Section
-        title="Database — couples invite RLS policy"
-        status={snap.database.couples_invite_rls.ok}
+        title="Database — couples table reachable"
+        status={snap.database.couples_table_reachable.ok}
       >
-        {snap.database.couples_invite_rls.error && (
-          <p className="mb-2 text-destructive">{snap.database.couples_invite_rls.error}</p>
+        {snap.database.couples_table_reachable.error && (
+          <p className="mb-2 text-destructive">
+            {snap.database.couples_table_reachable.error}
+          </p>
         )}
-        <Pre>{snap.database.couples_invite_rls.detail ?? "(no detail)"}</Pre>
+        <Pre>{snap.database.couples_table_reachable.detail ?? "(no detail)"}</Pre>
+      </Section>
+
+      <Section
+        title="Database — couples invite RLS policy"
+        status={snap.database.couples_rls_policy_check.ok}
+      >
+        <Pre>{snap.database.couples_rls_policy_check.detail ?? "(no detail)"}</Pre>
       </Section>
 
       <Section title="Your conversations" status={snap.data.conversations.ok}>
