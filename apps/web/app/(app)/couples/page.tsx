@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { type Tier } from "@quarrel/shared/constants";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { activeCoupleLimitFor } from "@/lib/couples";
+import { JoinByCodeForm } from "./JoinByCodeForm";
 import { revokeLink } from "./actions";
 
 // Couples list (§9.3.1). Shows every couple_link the user participates in,
@@ -88,6 +89,17 @@ export default async function CouplesPage() {
       <p className="mt-2 text-xs text-muted-foreground">
         Tier: {tier} · cap {limit} active link{limit === 1 ? "" : "s"}.
       </p>
+
+      {limit > 0 && (
+        <section className="mt-6 rounded-lg border border-input bg-card p-4">
+          <h2 className="text-sm font-semibold">Have an invite code?</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your partner sent you an invite — paste their code below (or click
+            their link, which does the same thing).
+          </p>
+          <JoinByCodeForm />
+        </section>
+      )}
 
       <Section title="Active" links={active} currentUserId={user.id} variant="active" />
       <Section title="Pending invites" links={pending} currentUserId={user.id} variant="pending" />
