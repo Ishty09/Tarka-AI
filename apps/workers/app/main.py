@@ -34,4 +34,12 @@ app.include_router(onboarding.router)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    # build_marker is bumped on every meaningful change so the
+    # /api/diagnostics endpoint in apps/web can verify the workers
+    # container is actually running the latest code, not a stale
+    # Coolify image. Bump this string in the same commit as the
+    # corresponding web-side fix when you need to be sure.
+    return {
+        "status": "ok",
+        "build_marker": "2026-05-29-council-structured-errors",
+    }
