@@ -34,7 +34,10 @@ COMMIT_SHORT=$(git rev-parse --short HEAD)
 log "    Commit on main: $COMMIT_SHORT"
 
 log "Step 2/6 — Building workers image (takes 1-3 min)"
-if ! docker build -f apps/workers/Dockerfile -t quarrel-workers:latest . > /tmp/workers-build.log 2>&1; then
+# Build context must be apps/workers/ — the Dockerfile's COPY commands
+# reference pyproject.toml and ./app relative to that directory, not
+# the repo root.
+if ! docker build -t quarrel-workers:latest apps/workers > /tmp/workers-build.log 2>&1; then
   log "    BUILD FAILED. Last 30 lines:"
   tail -30 /tmp/workers-build.log
   exit 1
