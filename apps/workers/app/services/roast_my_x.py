@@ -86,7 +86,9 @@ async def generate_roast(
                 {"role": "user", "content": body},
             ],
             temperature=0.85,
-            max_tokens=400,
+            # Reasoning models burn 300-2000 internal tokens before
+            # visible content (same root cause as the council fix).
+            max_tokens=2500,
             user=user_id,
             metadata=build_trace_metadata(
                 name="roast_my_x",

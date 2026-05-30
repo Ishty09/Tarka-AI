@@ -60,7 +60,9 @@ async def generate_future_self_message(
                 {"role": "user", "content": decision},
             ],
             temperature=0.7,
-            max_tokens=600,
+            # Reasoning models burn 300-2000 internal tokens before
+            # visible content (same root cause as the council fix).
+            max_tokens=2500,
             user=user_id,
             metadata=build_trace_metadata(
                 name="future_self",

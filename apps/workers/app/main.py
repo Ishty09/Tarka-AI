@@ -41,5 +41,5 @@ async def health() -> dict[str, str]:
     # corresponding web-side fix when you need to be sure.
     return {
         "status": "ok",
-        "build_marker": "2026-05-29-council-structured-errors",
+        "build_marker": "2026-05-30-reasoning-model-token-budget",
     }

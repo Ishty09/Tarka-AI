@@ -37,7 +37,17 @@ log = structlog.get_logger(__name__)
 
 # Cap each councilor's response so the judge prompt fits comfortably in
 # context — §9.1.2 calls for ~200 words per member.
-MAX_COUNCILOR_TOKENS = 350
+#
+# Why so high relative to the ~200-word target: GPT-5-mini (the current
+# quarrel-argue model) is a reasoning model — it spends 300-2000 tokens
+# of internal reasoning BEFORE producing visible content. If max_tokens
+# is too low, the reasoning eats the entire budget and the visible
+# message.content comes back empty (we saw all 5 councilors return
+# empty_content in production with the previous 350-token limit, which
+# wiped out every council run). 3000 leaves plenty of headroom for
+# reasoning + the actual reply; non-reasoning models will still stop
+# at the natural end of generation well before this cap.
+MAX_COUNCILOR_TOKENS = 3000
 
 
 class JudgeVerdict(BaseModel):

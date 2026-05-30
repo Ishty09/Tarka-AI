@@ -63,7 +63,9 @@ async def generate_rebuttal(
                 {"role": "user", "content": past_content},
             ],
             temperature=0.6,
-            max_tokens=600,
+            # Reasoning models burn 300-2000 internal tokens before
+            # visible content (same root cause as the council fix).
+            max_tokens=2500,
             user=user_id,
             metadata=build_trace_metadata(
                 name="past_self",
