@@ -63,6 +63,24 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
   const otherProfile = unwrap(youAreCreator ? link.partner_b : link.partner_a);
   const partnerName = otherProfile?.display_name ?? otherProfile?.username ?? "your partner";
 
+  // Post-accept stale-read guard: if this user IS user_b, the link must
+  // be active (you can only be set as user_b by acceptInvite which
+  // atomically flips status to 'active'). Seeing 'pending' here means
+  // we're rendering a cached row from before the accept committed.
+  // Re-fetch with no cache before showing the "still pending" dead-end.
+  if (link.status === "pending" && !youAreCreator && link.user_b === user.id) {
+    const { data: fresh } = await supabase
+      .from("couple_links")
+      .select("status")
+      .eq("id", linkId)
+      .maybeSingle();
+    if (fresh?.status && fresh.status !== "pending") {
+      // The DB really IS active — Next was serving cached. Redirect to
+      // ourselves; the request after redirect won't have the cache hit.
+      redirect(`/couples/${linkId}`);
+    }
+  }
+
   if (link.status === "active") {
     // Start (or find) the shared conversation via workers. Server-side
     // fetch with the user's cookie session forwarded as bearer through
@@ -214,10 +232,27 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
       </p>
 
       {link.status === "pending" && (
-        <section className="mt-6 rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-          {youAreCreator
-            ? "Waiting for your partner to accept. The invite link expires after 7 days."
-            : "You're seeing this because the invite is still pending — refresh after accepting."}
+        <section className="mt-6 flex flex-col gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          {youAreCreator ? (
+            <p>
+              Waiting for your partner to accept. The invite link expires
+              after 7 days.
+            </p>
+          ) : (
+            <>
+              <p>
+                This invite hasn&apos;t been accepted yet. If you just clicked
+                Accept, refresh — the page sometimes loads before the write
+                lands.
+              </p>
+              <Link
+                href={`/couples/${link.id}`}
+                className="inline-flex w-fit items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90"
+              >
+                Refresh now
+              </Link>
+            </>
+          )}
         </section>
       )}
 

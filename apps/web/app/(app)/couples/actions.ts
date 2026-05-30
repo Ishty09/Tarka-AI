@@ -245,7 +245,11 @@ export async function acceptInvite(
   if (error) return { ok: false, error: "Couldn't accept invite." };
 
   await trackServer("couple_link_accepted", { user_id: hashUserId(user.id) });
+  // Invalidate BOTH the list view and the specific link's page so the
+  // /couples/[linkId] render after redirect doesn't serve a cached
+  // copy showing status='pending'.
   revalidatePath("/couples");
+  revalidatePath(`/couples/${link.id}`);
   redirect(`/couples/${link.id}`);
 }
 
