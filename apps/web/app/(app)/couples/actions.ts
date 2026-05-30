@@ -199,17 +199,38 @@ export async function acceptInvite(
       error: "Free tier doesn't include couples mode. Upgrade to accept this invite.",
     };
   }
-  const { count } = await supabase
+  // Cap check: count active + non-expired pending (mirror the createInvite
+  // logic from 21aa2c2). Without the expiry filter, a free user with one
+  // stale pending invite from days ago can never accept anyone else's
+  // invite.
+  const nowIso = new Date().toISOString();
+  const { count: activeCount } = await supabase
     .from("couple_links")
     .select("id", { count: "exact", head: true })
-    .in("status", ["pending", "active"])
+    .eq("status", "active")
     .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-  if ((count ?? 0) >= limit) {
+  const { count: pendingCount } = await supabase
+    .from("couple_links")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .gt("invite_expires_at", nowIso)
+    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+  const liveCount = (activeCount ?? 0) + (pendingCount ?? 0);
+  if (liveCount >= limit) {
     return {
       ok: false,
-      error: `You're at your ${tier} cap of ${limit} active couple link${limit === 1 ? "" : "s"}.`,
+      error: `You're at your ${tier} cap of ${limit} active couple link${limit === 1 ? "" : "s"}. Revoke the existing one (on /couples) to accept this invite.`,
     };
   }
+
+  // Opportunistic sweep: any stale-pending rows owned by this user get
+  // flipped to 'expired' so they stop cluttering /couples. Best-effort.
+  await supabase
+    .from("couple_links")
+    .update({ status: "expired" })
+    .eq("status", "pending")
+    .lt("invite_expires_at", nowIso)
+    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
   const { error } = await supabase
     .from("couple_links")
