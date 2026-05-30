@@ -162,95 +162,51 @@ export async function acceptInvite(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: link } = await supabase
-    .from("couple_links")
-    .select("id, user_a, user_b, invite_expires_at, status")
-    .eq("invite_code", parsed.data.invite_code)
-    .maybeSingle();
-  if (!link) return { ok: false, error: "Invite not found." };
-  if (link.user_a === user.id) {
-    return { ok: false, error: "You created this invite — share it with your partner instead." };
+  // Atomic accept via couples_accept_invite() SECURITY DEFINER function
+  // (migration 20260530130000). All the validation (existence, expiry,
+  // self-invite, already-accepted, tier cap, stale-pending sweep) AND
+  // the actual UPDATE happen in one transaction inside the function,
+  // bypassing the RLS gotcha where the would-be partner can't UPDATE
+  // a pending row because they're not yet user_b. Returns either the
+  // link_id (success) or an error_code (which we map to copy here).
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "couples_accept_invite",
+    { p_invite_code: parsed.data.invite_code },
+  );
+  if (rpcError) {
+    return { ok: false, error: "Couldn't accept invite. Try again." };
   }
-  if (link.user_b !== null) {
-    return { ok: false, error: "This invite was already accepted." };
-  }
-  if (link.status !== "pending") {
-    return { ok: false, error: `Invite is ${link.status}.` };
-  }
-  if (link.invite_expires_at && new Date(link.invite_expires_at) < new Date()) {
-    await supabase
-      .from("couple_links")
-      .update({ status: "expired" })
-      .eq("id", link.id);
-    return { ok: false, error: "This invite expired." };
+  const result = (rpcData as Array<{ link_id: string | null; error_code: string | null }> | null)?.[0];
+  if (!result) {
+    return { ok: false, error: "Couldn't accept invite. Try again." };
   }
 
-  // Tier cap check for the accepter.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("tier")
-    .eq("id", user.id)
-    .maybeSingle();
-  const tier: Tier = (profile?.tier as Tier) ?? "free";
-  const limit = activeCoupleLimitFor(tier);
-  if (limit === 0) {
-    return {
-      ok: false,
-      error: "Free tier doesn't include couples mode. Upgrade to accept this invite.",
+  if (result.error_code) {
+    const messages: Record<string, string> = {
+      unauthenticated: "Please sign in to accept this invite.",
+      not_found: "Invite not found.",
+      self_invite:
+        "You created this invite — share the link with your partner instead.",
+      already_accepted: "This invite has already been accepted.",
+      expired: "This invite expired.",
+      tier_free_no_couples:
+        "Free tier doesn't include couples mode. Upgrade to accept.",
+      cap_exceeded: `You're at your tier cap of active couple links. Revoke an existing one (on /couples) to accept this invite.`,
     };
-  }
-  // Cap check: count active + non-expired pending (mirror the createInvite
-  // logic from 21aa2c2). Without the expiry filter, a free user with one
-  // stale pending invite from days ago can never accept anyone else's
-  // invite.
-  const nowIso = new Date().toISOString();
-  const { count: activeCount } = await supabase
-    .from("couple_links")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "active")
-    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-  const { count: pendingCount } = await supabase
-    .from("couple_links")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .gt("invite_expires_at", nowIso)
-    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-  const liveCount = (activeCount ?? 0) + (pendingCount ?? 0);
-  if (liveCount >= limit) {
     return {
       ok: false,
-      error: `You're at your ${tier} cap of ${limit} active couple link${limit === 1 ? "" : "s"}. Revoke the existing one (on /couples) to accept this invite.`,
+      error: messages[result.error_code] ?? `Couldn't accept invite: ${result.error_code}.`,
     };
   }
 
-  // Opportunistic sweep: any stale-pending rows owned by this user get
-  // flipped to 'expired' so they stop cluttering /couples. Best-effort.
-  await supabase
-    .from("couple_links")
-    .update({ status: "expired" })
-    .eq("status", "pending")
-    .lt("invite_expires_at", nowIso)
-    .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-
-  const { error } = await supabase
-    .from("couple_links")
-    .update({
-      user_b: user.id,
-      consent_b: true,
-      status: "active",
-      invite_code: null, // burn the code so the URL is one-shot
-      invite_expires_at: null,
-    })
-    .eq("id", link.id);
-  if (error) return { ok: false, error: "Couldn't accept invite." };
+  if (!result.link_id) {
+    return { ok: false, error: "Couldn't accept invite. Try again." };
+  }
 
   await trackServer("couple_link_accepted", { user_id: hashUserId(user.id) });
-  // Invalidate BOTH the list view and the specific link's page so the
-  // /couples/[linkId] render after redirect doesn't serve a cached
-  // copy showing status='pending'.
   revalidatePath("/couples");
-  revalidatePath(`/couples/${link.id}`);
-  redirect(`/couples/${link.id}`);
+  revalidatePath(`/couples/${result.link_id}`);
+  redirect(`/couples/${result.link_id}`);
 }
 
 // ----- Revoke link (§9.3.1 UI state "Revoked") -----------------------------

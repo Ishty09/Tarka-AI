@@ -63,24 +63,6 @@ export default async function CoupleLinkDetailPage({ params }: PageProps) {
   const otherProfile = unwrap(youAreCreator ? link.partner_b : link.partner_a);
   const partnerName = otherProfile?.display_name ?? otherProfile?.username ?? "your partner";
 
-  // Post-accept stale-read guard: if this user IS user_b, the link must
-  // be active (you can only be set as user_b by acceptInvite which
-  // atomically flips status to 'active'). Seeing 'pending' here means
-  // we're rendering a cached row from before the accept committed.
-  // Re-fetch with no cache before showing the "still pending" dead-end.
-  if (link.status === "pending" && !youAreCreator && link.user_b === user.id) {
-    const { data: fresh } = await supabase
-      .from("couple_links")
-      .select("status")
-      .eq("id", linkId)
-      .maybeSingle();
-    if (fresh?.status && fresh.status !== "pending") {
-      // The DB really IS active — Next was serving cached. Redirect to
-      // ourselves; the request after redirect won't have the cache hit.
-      redirect(`/couples/${linkId}`);
-    }
-  }
-
   if (link.status === "active") {
     // Start (or find) the shared conversation via workers. Server-side
     // fetch with the user's cookie session forwarded as bearer through
